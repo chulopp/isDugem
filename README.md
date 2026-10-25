@@ -24,21 +24,18 @@ RantauGuard adalah sistem IoT pemantau mahasiswa rantau terintegrasi dengan vali
 
 ```mermaid
 flowchart LR
-    subgraph EdgeDevices["Edge Devices (Smartphone Web App)"]
-        EA["Edge HP Anak\n(GPS + Mic + Accel)"]
-        EO["Edge HP Ortu\n(Shake Sensor + Remote)"]
+    subgraph VercelCloud["Vercel Cloud Deployment (HTTPS Resmi)"]
+        DASH["/ (Laptop Ortu)\nDashboard Command Center\nPeta, Visualizer, Alert, Simulator"]
+        EA["/anak (Smartphone Anak)\nSensor GPS, Audio dB, Accel"]
+        EO["/ortu (Smartphone Ortu)\nShake-to-Ping, Remote Controls"]
     end
 
-    subgraph CloudBroker["Cloud Broker (HiveMQ)"]
+    subgraph CloudBroker["Broker Cloud (HiveMQ)"]
         MQTT["broker.hivemq.com\nPort 8883 (TLS) & 8884 (WSS)"]
     end
 
     subgraph Backend["Server Processing (Python)"]
-        PROC["Data Processing:\n- Haversine Distance\n- Audio RMS -> dB\n- Decision Engine Classifier"]
-    end
-
-    subgraph Monitoring["Command Center (Laptop Ortu)"]
-        DASH["Dashboard Next.js 14\n- Live Dark Map & Geofence\n- Audio Visualizer\n- Anomaly & Status Alert\n- Demo Preset Simulator"]
+        PROC["Data Processing:\n- Haversine Geofencing\n- Audio RMS -> dB\n- Decision Engine Classifier"]
     end
 
     EA -->|"telemetry (GPS, dB, Accel)"| MQTT
@@ -51,15 +48,31 @@ flowchart LR
 
 ---
 
+## 🌐 Arsitektur Deployment Baru (All-in-One Vercel HTTPS)
+
+Untuk menghindari kendala **pemblokiran izin mikrofon & GPS oleh browser smartphone (Chrome & Safari)** pada jaringan lokal non-HTTPS, seluruh modul antarmuka web disatukan dalam **1 Project Next.js di Vercel**:
+
+- **Domain Vercel:** `https://isdugem.vercel.app` (contoh)
+- 💻 **Laptop Ortu (Dashboard):** buka `https://isdugem.vercel.app/`
+- 📱 **HP Anak (Sensor):** buka `https://isdugem.vercel.app/anak` (scan QR Code)
+- 📱 **HP Ortu (Shake-to-Ping):** buka `https://isdugem.vercel.app/ortu` (scan QR Code)
+
+> ✅ **Keunggulan:**  
+> 1. Bebas dari kendala WiFi kampus (*tidak wajib 1 jaringan WiFi yang sama*).  
+> 2. Izin GPS & Mikrofon otomatis disetujui karena menggunakan protokol **HTTPS terenkripsi resmi**.  
+> 3. Desain antarmuka 100% konsisten menggunakan Tailwind CSS.
+
+---
+
 ## 👥 Pembagian Tugas Tim (3 Orang)
 
-Setiap anggota memiliki area tanggung jawab folder masing-masing untuk mencegah tabrakan kode (*merge conflict*):
+Setiap anggota memiliki area tanggung jawab masing-masing untuk mencegah tabrakan kode (*merge conflict*):
 
 | Anggota | Peran | Folder Tanggung Jawab | Prefix Branch |
 |---|---|---|---|
-| **Anggota 1** | **Edge Device Lead** | `edge/anak/`, `edge/ortu/` | `edge/*` |
+| **Anggota 1** | **Edge Device Lead** | `dashboard/app/anak/`, `dashboard/app/ortu/` *(fallback: `edge/`)* | `edge/*` |
 | **Anggota 2** | **Backend Processing & Algoritma Lead** | `server/` | `server/*` |
-| **Anggota 3** | **Dashboard Lead (Next.js)** | `dashboard/` | `dashboard/*` |
+| **Anggota 3** | **Dashboard Lead (Next.js)** | `dashboard/app/page.tsx`, `dashboard/components/` | `dashboard/*` |
 
 ---
 
@@ -199,29 +212,39 @@ isDugem/
 
 ---
 
-### 2. Modul Edge Device HP (`edge/anak/` & `edge/ortu/`)
-1. Salin konfigurasi:
-   ```bash
-   cd edge/anak
-   cp config.example.js config.js
-   ```
-2. Buka folder menggunakan extension **Live Server** di VS Code atau server lokal statis (misal: `npx serve .`).
-3. Buka URL dari browser smartphone yang berada dalam satu jaringan WiFi.
-4. Klik tombol **"Mulai Sensor & Telemetri"** dan berikan izin akses Lokasi & Mikrofon.
+### 2. Modul Web App & Dashboard Next.js (`dashboard/`)
+Seluruh antarmuka web (Dashboard Laptop `/`, HP Anak `/anak`, dan HP Ortu `/ortu`) dikelola di dalam folder ini:
 
----
-
-### 3. Modul Dashboard Next.js (`dashboard/`)
-1. Masuk ke folder dashboard:
+1. Masuk ke folder dashboard dan pasang dependensi:
    ```bash
    cd dashboard
    cp .env.local.example .env.local
+   npm install
    ```
-2. Jalankan server pengembang:
+2. Jalankan server pengembang di lokal:
    ```bash
    npm run dev
    ```
-3. Buka di browser: [http://localhost:3000](http://localhost:3000).
+   - Dashboard Laptop: [http://localhost:3000](http://localhost:3000)
+   - Web HP Anak: [http://localhost:3000/anak](http://localhost:3000/anak)
+   - Web HP Ortu: [http://localhost:3000/ortu](http://localhost:3000/ortu)
+
+3. **Deploy ke Vercel (Produksi HTTPS Gratis):**
+   - Connect repository `chulopp/isDugem` ke akun [Vercel](https://vercel.com).
+   - Set *Root Directory* ke: `dashboard`.
+   - Klik **Deploy** ➔ Dapatkan domain `https://<nama-project>.vercel.app`.
+   - HP Anak dan HP Ortu tinggal memindai QR Code dari browser smartphone masing-masing.
+
+---
+
+### 3. Modul Edge Standalone Fallback (`edge/anak/` & `edge/ortu/`)
+*Tersedia sebagai cadangan file statis HTML/JS jika ingin dijalankan tanpa Next.js / saat pengujian offline.*
+1. Salin konfigurasi:
+   ```bash
+   cd edge/anak && cp config.example.js config.js
+   cd ../ortu && cp config.example.js config.js
+   ```
+2. Buka menggunakan extension **Live Server** di VS Code atau server lokal statis.
 
 ---
 

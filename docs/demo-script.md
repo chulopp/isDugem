@@ -12,10 +12,10 @@ Dokumen ini memandu langkah-langkah demonstrasi sistem IoT RantauGuard (isDugem)
 2. **Environment:**
    - Pastikan variabel `PROJECT_ID` pada modul Server, Dashboard, dan Edge bernilai sama (contoh: `isdugem_tim_01`).
 3. **Eksekusi Komponen:**
-   - [ ] Server backend Python berjalan (`python main.py`).
-   - [ ] Dashboard Next.js berjalan di browser laptop (`npm run dev` -> `http://localhost:3000`).
-   - [ ] Web app HP Anak dibuka via HTTPS di browser Chrome/Safari (`edge/anak/index.html`).
-   - [ ] Web app HP Ortu dibuka di browser HP (`edge/ortu/index.html`).
+   - [ ] Server backend Python berjalan (`python main.py` di laptop backend).
+   - [ ] Dashboard Next.js berjalan di laptop (`npm run dev` atau buka domain Vercel `https://isdugem.vercel.app/`).
+   - [ ] Web app HP Anak dibuka via scan QR Code / browser HP (`https://isdugem.vercel.app/anak`).
+   - [ ] Web app HP Ortu dibuka via scan QR Code / browser HP (`https://isdugem.vercel.app/ortu`).
 
 ---
 
