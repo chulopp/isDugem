@@ -3,7 +3,10 @@ Decision Engine classifier for RantauGuard.
 Evaluates Context against the rule-based Decision Table (PRD Section 8.5).
 """
 
-from ..models import Context, AlertStatus
+try:
+    from ..models import Context, AlertStatus
+except ImportError:
+    from models import Context, AlertStatus
 
 
 def classify(ctx: Context) -> AlertStatus:
