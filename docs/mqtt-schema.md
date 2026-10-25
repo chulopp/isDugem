@@ -20,7 +20,7 @@ Semua modul (`edge`, `server`, dan `dashboard`) **WAJIB** mengikuti nama topik, 
 
 | Topik | Publisher | Subscriber | QoS | Keterangan |
 |---|---|---|---|---|
-| `rantauguard/{PROJECT_ID}/edge/anak/telemetry` | Edge Anak | Server | 1 | Telemetri sensor berkala (GPS, audio dB, accelerometer) setiap 2–3 detik |
+| `rantauguard/{PROJECT_ID}/edge/anak/telemetry` | Edge Anak | Server | 1 | Telemetri sensor berkala (GPS, audio dB, accelerometer) setiap 2-3 detik |
 | `rantauguard/{PROJECT_ID}/edge/ortu/telemetry` | Edge Ortu | Server | 1 | Telemetri posisi & status goyangan (shake) HP ortu |
 | `rantauguard/{PROJECT_ID}/alerts` | Server | Edge Anak, Edge Ortu, Dashboard | 1 | Hasil klasifikasi status dan evaluasi aturan dari server |
 | `rantauguard/{PROJECT_ID}/command/ping` | Edge Ortu, Dashboard | Edge Anak, Server | 1 | Perintah cek status / getar HP anak |
@@ -32,7 +32,7 @@ Semua modul (`edge`, `server`, dan `dashboard`) **WAJIB** mengikuti nama topik, 
 ## 3. Spesifikasi Payload JSON
 
 ### 3.1 `rantauguard/{PROJECT_ID}/edge/anak/telemetry`
-Dipublish oleh `edge/anak` secara berkala (tiap 2–3 detik):
+Dipublish oleh `edge/anak` secara berkala (tiap 2-3 detik):
 ```json
 {
   "device_id": "anak",
@@ -109,13 +109,31 @@ Dipublish oleh `server` setiap kali terjadi perubahan status klasifikasi atau ko
 
 ## 4. Titik Geofence POI (Point of Interest)
 
-Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboard:
+Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboard (mencakup area UNDIP Tembalang hingga Semarang Bawah / Kota Lama):
 ```json
 {
-  "kampus": { "lat": -6.9915, "lon": 110.4210, "radius_m": 150 },
-  "masjid": { "lat": -6.9930, "lon": 110.4195, "radius_m": 100 },
-  "kos":    { "lat": -6.9940, "lon": 110.4225, "radius_m": 50 },
-  "bar":    { "lat": -6.9960, "lon": 110.4240, "radius_m": 100 }
+  "kampus": { "lat": -7.0502, "lon": 110.4398, "radius_m": 150 },
+  "masjid": { "lat": -7.0519, "lon": 110.4398, "radius_m": 100 },
+  "kos": {
+    "lat": -7.0612,
+    "lon": 110.4338,
+    "radius_m": 50,
+    "sub_points": [
+      { "name": "Kos Mulawarman", "lat": -7.0612, "lon": 110.4338 },
+      { "name": "Kos Gondang", "lat": -7.0562, "lon": 110.4402 },
+      { "name": "Kos Banjarsari", "lat": -7.0558, "lon": 110.4368 }
+    ]
+  },
+  "bar": {
+    "lat": -6.9680,
+    "lon": 110.4285,
+    "radius_m": 100,
+    "sub_points": [
+      { "name": "RedHare Kota Lama", "lat": -6.9680, "lon": 110.4285 },
+      { "name": "Marabunta Kota Lama", "lat": -6.9691, "lon": 110.4272 },
+      { "name": "Golden Tiger Semarang", "lat": -7.0016, "lon": 110.4452 }
+    ]
+  }
 }
 ```
 *(Catatan: Koordinat dapat disesuaikan di file `.env` masing-masing modul sesuai area demo).*
@@ -132,4 +150,4 @@ Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboa
 | `jam_malam` | ≤ 50m kos (`claimed_at_kos=true`) | > 80 dB | `ANOMALY_FAKE_GPS` (Prioritas Tinggi) |
 | `jam_malam` | ≤ 50m kos | < 55 dB | `ISTIRAHAT_DI_KOS` |
 | `jam_malam` | ≤ 100m bar | > 75 dB | `CRITICAL_TERDETEKSI_DI_BAR` |
-| lainnya | — | — | `NORMAL` |
+| lainnya | - | - | `NORMAL` |
