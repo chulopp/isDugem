@@ -48,18 +48,15 @@ def parseTime(text: str) -> time:
     except (ValueError, TypeError) as exc:
         raise ConfigError(f"Format jam harus HH:MM, dapat: {text!r}") from exc
 
-
 def parseWindow(text: str) -> rangeTime:
     parts = text.strip().split("-")
     if len(parts) != 2:
         raise ConfigError(f"Format waktu harus HH:MM-HH:MM, dapat: {text!r}")
     return rangeTime(parseTime(parts[0]), parseTime(parts[1]))
 
-
 def parseWindows(text: str) -> Tuple[rangeTime, ...]:
     items = [p for p in (text or "").split(",") if p.strip()]
     return tuple(parseWindow(p) for p in items)
-
 
 def parsePOI(name: str, text: str) -> POI:
     parts = [p.strip() for p in text.split(",")]
@@ -76,6 +73,41 @@ def parsePOI(name: str, text: str) -> POI:
     if radius <= 0:
         raise ConfigError(f"POI_{name.upper()} radius harus > 0: {text!r}")
     return POI(lat=lat, lon=lon, radius_m=radius)
+
+def _env_bool(key: str, default: bool) -> bool:
+    raw = os.getenv(key)
+    if raw is None or raw.strip() == "":
+        return default
+    value = raw.strip().lower()
+    if value in ("1", "true", "yes", "y", "on"):
+        return True
+    if value in ("0", "false", "no", "n", "off"):
+        return False
+    raise ConfigError(f"{key} harus boolean (true/false), dapat: {raw!r}")
+
+def _env_int(key: str, default: int) -> int:
+    raw = os.getenv(key)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError as exc:
+        raise ConfigError(f"{key} harus bilangan bulat, dapat: {raw!r}") from exc
+
+def _env_float(key: str, default: float) -> float:
+    raw = os.getenv(key)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return float(raw.strip())
+    except ValueError as exc:
+        raise ConfigError(f"{key} harus angka, dapat: {raw!r}") from exc
+
+def _env_str(key: str, default: str) -> str:
+    raw = os.getenv(key)
+    return default if raw is None or raw.strip() == "" else raw.strip()
+
+_PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 
 @dataclass
 class Config:
@@ -134,45 +166,50 @@ def load_config(env_file: Optional[Path] = None) -> Config:
     env_path = env_file or (Path(__file__).resolve().parent / ".env")
     load_dotenv(env_path, override=False)
 
-    project_id = os.getenv("PROJECT_ID", "isdugem_tim_01")
+    project_id = _env_str("PROJECT_ID", "isdugem_tim_01")
+    if not _PROJECT_ID_RE.match(project_id):
+        raise ConfigError(
+            "PROJECT_ID hanya boleh huruf, angka, '_' dan '-' "
+            f"(tanpa '/', '+', '#'), dapat: {project_id!r}"
+        )
 
-    qos = os.getenv("MQTT_QOS", 1)
+    qos = _env_int("MQTT_QOS", 1)
     if qos not in (0, 1, 2):
         raise ConfigError(f"MQTT_QOS harus 0, 1, atau 2, dapat: {qos}")
 
-    tz_name = os.getenv("TIMEZONE", "Asia/Jakarta")
+    tz_name = _env_str("TIMEZONE", "Asia/Jakarta")
     try:
         ZoneInfo(tz_name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise ConfigError(
-            f"TIMEZONE {tz_name!r} tidak ditemukan."
+            f"TIMEZONE {tz_name!r} tidak ditemukan. Di Windows jalankan: pip install tzdata"
         ) from exc
 
     poi = {
-        name: parsePOI(name, os.getenv(f"POI_{name.upper()}", DEFAULT_POI[name]))
+        name: parsePOI(name, _env_str(f"POI_{name.upper()}", DEFAULT_POI[name]))
         for name in POI_NAMES
     }
 
-    heartbeat = os.getenv("ALERT_HEARTBEAT_S", 0.0)
+    heartbeat = _env_float("ALERT_HEARTBEAT_S", 0.0)
     if heartbeat < 0:
         raise ConfigError("ALERT_HEARTBEAT_S tidak boleh negatif")
 
     return Config(
-        project_id = project_id,
-        mqtt_host = os.getenv("MQTT_HOST", "broker.hivemq.com"),
-        mqtt_port = os.getenv("MQTT_PORT", 8883),
-        mqtt_use_tls = os.getenv("MQTT_USE_TLS", True),
-        mqtt_username = os.getenv("MQTT_USERNAME") or None,
-        mqtt_password = os.getenv("MQTT_PASSWORD") or None,
-        mqtt_keepalive = os.getenv("MQTT_KEEPALIVE", 60),
-        mqtt_qos = qos,
-        timezone = tz_name,
-        use_server_clock = os.getenv("USE_SERVER_CLOCK", False),
-        kuliah_window = parseTime(os.getenv("KULIAH_WINDOW", "08:00-15:00")),
-        sholat_windows = parseTime(os.getenv("SHOLAT_WINDOWS", "12:00-12:45")),
-        malam_window = parseTime(os.getenv("MALAM_WINDOW", "22:00-05:00")),
-        poi = poi,
-        alert_heartbeat_s = heartbeat,
-        ping_republish = os.getenv("PING_REPUBLISH", True),
-        log_level = os.getenv("LOG_LEVEL", "INFO").upper(),
+        project_id=project_id,
+        mqtt_host=_env_str("MQTT_HOST", "broker.hivemq.com"),
+        mqtt_port=_env_int("MQTT_PORT", 8883),
+        mqtt_use_tls=_env_bool("MQTT_USE_TLS", True),
+        mqtt_username=os.getenv("MQTT_USERNAME") or None,
+        mqtt_password=os.getenv("MQTT_PASSWORD") or None,
+        mqtt_keepalive=_env_int("MQTT_KEEPALIVE", 60),
+        mqtt_qos=qos,
+        timezone=tz_name,
+        use_server_clock=_env_bool("USE_SERVER_CLOCK", False),
+        kuliah_window=parseWindow(_env_str("KULIAH_WINDOW", "08:00-15:00")),
+        sholat_windows=parseWindows(_env_str("SHOLAT_WINDOWS", "12:00-12:45")),
+        malam_window=parseWindow(_env_str("MALAM_WINDOW", "22:00-05:00")),
+        poi=poi,
+        alert_heartbeat_s=heartbeat,
+        ping_republish=_env_bool("PING_REPUBLISH", True),
+        log_level=_env_str("LOG_LEVEL", "INFO").upper(),
     )

@@ -68,8 +68,11 @@ class MqttClient:
         logger.debug("Publish %s: %s", topic, body)
         return True
 
-    def run_forever(self) -> None:
+    def connect(self) -> None:
         self._client.connect_async(self._cfg.mqtt_host, self._cfg.mqtt_port, self._cfg.mqtt_keepalive)
+
+    def run_forever(self) -> None:
+        self.connect()
         self._client.loop_forever(retry_first_connection=True)
 
     def stop(self) -> None:

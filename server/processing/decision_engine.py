@@ -1,9 +1,8 @@
 from __future__ import annotations
-from dataclasses import dataclass
 from datetime import time
 from typing import Dict, Mapping, Optional, Sequence, Tuple
 from config import POI, rangeTime
-from models import Status
+from models import Context, Status  
 from processing.haversine import haversine_distance_m
 
 JAM_KULIAH = "jam_kuliah"
@@ -22,16 +21,6 @@ DB_KULIAH_TENANG_MAX = 65.0
 DB_KOS_TENANG_MAX = 55.0      
 DB_BAR_MIN = 75.0             
 DB_ANOMALY_MIN = 80.0         
-
-@dataclass
-class Context:
-    time_label: str     
-    distance_kampus_m: float
-    distance_masjid_m: float
-    distance_kos_m: float
-    distance_bar_m: float
-    db_level: float
-    claimed_at_kos: bool  
 
 def get_time_label(
     local_time: time,

@@ -4,10 +4,8 @@ import math
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional
 
-
 class PayloadError(ValueError):
     """Payload MQTT tidak sesuai kontrak."""
-
 
 class Status:
     SEDANG_KULIAH = "SEDANG_KULIAH"
@@ -17,7 +15,6 @@ class Status:
     CRITICAL_TERDETEKSI_DI_BAR = "CRITICAL_TERDETEKSI_DI_BAR"
     ANOMALY_FAKE_GPS = "ANOMALY_FAKE_GPS"
     NORMAL = "NORMAL"
-
 
 ALL_STATUSES = (
     Status.SEDANG_KULIAH,
@@ -29,31 +26,44 @@ ALL_STATUSES = (
     Status.NORMAL,
 )
 
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+def _number(value: Any, name: str) -> float:
+    if not _is_number(value):
+        raise PayloadError(f"{name} harus berupa angka, dapat: {value!r}")
+    result = float(value)
+    if not math.isfinite(result):
+        raise PayloadError(f"{name} harus bilangan terhingga, dapat: {value!r}")
+    return result
+
+def _sequence(data: Mapping[str, Any]) -> int:
+    raw = data.get("sequence", 0)
+    return int(raw) if _is_number(raw) else 0
+
 def _mapping(value: Any, name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise PayloadError(f"{name} harus berupa object JSON, dapat: {type(value).__name__}")
     return value
 
-
 def parseLocation(data: Mapping[str, Any]) -> tuple:
     loc = _mapping(data.get("location"), "location")
-    lat = float(loc.get("lat"))
-    lon = float(loc.get("lon"))
+    lat = _number(loc.get("lat"), "location.lat")
+    lon = _number(loc.get("lon"), "location.lon")
     if not (-90.0 <= lat <= 90.0):
         raise PayloadError(f"location.lat di luar rentang [-90, 90]: {lat}")
     if not (-180.0 <= lon <= 180.0):
         raise PayloadError(f"location.lon di luar rentang [-180, 180]: {lon}")
     return loc, lat, lon
 
-
 def _optional_number(container: Mapping[str, Any], key: str, name: str, default: float) -> float:
     if key not in container or container[key] is None:
         return default
-    return float(container[key])
+    return _number(container[key], name)
 
 def _sent_at_ms(data: Mapping[str, Any]) -> Optional[int]:
     raw = data.get("sent_at_ms")
-    if math.isfinite(float(raw)) and float(raw) > 0:
+    if _is_number(raw) and math.isfinite(float(raw)) and float(raw) > 0:
         return int(raw)
     return None
 
@@ -85,10 +95,10 @@ class AnakTelemetry:
         db_value = audio.get("db")
         if rms_value is None and db_value is None:
             raise PayloadError("audio harus memuat minimal salah satu dari 'rms' atau 'db'")
-        rms_num = float(rms_value) if rms_value is not None else None
+        rms_num = _number(rms_value, "audio.rms") if rms_value is not None else None
         if rms_num is not None and rms_num < 0:
             raise PayloadError(f"audio.rms tidak boleh negatif: {rms_num}")
-        db_num = float(db_value) if db_value is not None else None
+        db_num = _number(db_value, "audio.db") if db_value is not None else None
 
         motion = data.get("motion")
         accel = 0.0
@@ -98,7 +108,7 @@ class AnakTelemetry:
             )
 
         return cls(
-            sequence= int(data),
+            sequence=_sequence(data),
             sent_at_ms=_sent_at_ms(data),
             lat=lat,
             lon=lon,
@@ -107,7 +117,6 @@ class AnakTelemetry:
             db=db_num,
             accel_magnitude=accel,
         )
-
 
 @dataclass
 class OrtuTelemetry:
@@ -139,13 +148,25 @@ class OrtuTelemetry:
             shake = raw_shake
 
         return cls(
-            sequence= int(data),
+            sequence=_sequence(data),
             sent_at_ms=_sent_at_ms(data),
             lat=lat,
             lon=lon,
             accel_magnitude=accel,
             shake_detected=shake,
         )
+
+@dataclass
+class Context:
+    """Input classify() (PRD 8.4)."""
+
+    time_label: str        
+    distance_kampus_m: float
+    distance_masjid_m: float
+    distance_kos_m: float
+    distance_bar_m: float
+    db_level: float
+    claimed_at_kos: bool   
 
 @dataclass
 class AlertContext:
@@ -161,7 +182,6 @@ class AlertContext:
             "distance_m": round(float(self.distance_m), 1),
             "db": round(float(self.db), 1),
         }
-
 
 @dataclass
 class Alert:
