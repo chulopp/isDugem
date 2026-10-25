@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RantauGuard — Edge HP Anak</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- MQTT.js over WebSocket -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>RantauGuard (Anak)</h1>
+    <span id="mqttStatus" class="badge badge-disconnected">Disconnected</span>
+  </header>
+
+  <div class="card">
+    <button id="btnStartSensors">Mulai Sensor & Telemetri</button>
+  </div>
+
+  <div id="alertBox" class="alert-box">
+    <div id="alertStatus" class="alert-status">-</div>
+    <div id="alertReason">-</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Lokasi & GPS</div>
+    <div class="sensor-grid">
+      <div>
+        <div class="sensor-label">Latitude</div>
+        <div id="valLat" class="sensor-val">-</div>
+      </div>
+      <div>
+        <div class="sensor-label">Longitude</div>
+        <div id="valLon" class="sensor-val">-</div>
+      </div>
+      <div>
+        <div class="sensor-label">Akurasi</div>
+        <div id="valAccuracy" class="sensor-val">- m</div>
+      </div>
+      <div>
+        <div class="sensor-label">Status GPS</div>
+        <div id="valGpsStatus" class="sensor-val">Menunggu</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Suasana Suara Sekitar (Mikrofon)</div>
+    <div class="sensor-grid">
+      <div>
+        <div class="sensor-label">Tingkat Suara</div>
+        <div id="valDb" class="sensor-val">- dB</div>
+      </div>
+      <div>
+        <div class="sensor-label">RMS Audio</div>
+        <div id="valRms" class="sensor-val">-</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Gerakan (Accelerometer)</div>
+    <div class="sensor-grid">
+      <div>
+        <div class="sensor-label">Magnitude Akselerasi</div>
+        <div id="valAccel" class="sensor-val">- m/s²</div>
+      </div>
+      <div>
+        <div class="sensor-label">Paket Terkirim</div>
+        <div id="valSequence" class="sensor-val">0</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    RantauGuard IoT Project &copy; 2026 — Modul Edge Anak
+  </footer>
+
+  <script src="config.js" onerror="console.warn('config.js belum dibuat. Silakan salin config.example.js ke config.js');"></script>
+  <script src="app.js"></script>
+</body>
+</html>
