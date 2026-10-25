@@ -62,33 +62,34 @@ def load_config() -> AppConfig:
     )
     poi_masjid = POI(
         name="masjid",
-        lat=float(os.getenv("MASJID_LAT", "-7.0519")),
-        lon=float(os.getenv("MASJID_LON", "110.4398")),
+        lat=float(os.getenv("MASJID_LAT", "-7.0552")),
+        lon=float(os.getenv("MASJID_LON", "110.4370")),
         radius_m=float(os.getenv("MASJID_RADIUS_M", "100.0")),
-        sub_points=((-7.0519, 110.4398),),
+        sub_points=((-7.0552, 110.4370),),
     )
     poi_kos = POI(
         name="kos",
-        lat=float(os.getenv("KOS_LAT", "-7.0612")),
-        lon=float(os.getenv("KOS_LON", "110.4338")),
-        radius_m=float(os.getenv("KOS_RADIUS_M", "50.0")),
+        lat=float(os.getenv("KOS_LAT", "-7.067588")),
+        lon=float(os.getenv("KOS_LON", "110.439708")),
+        radius_m=float(os.getenv("KOS_RADIUS_M", "60.0")),
         # Mencakup Kos Mulawarman, Kos Gondang, dan Kos Banjarsari
         sub_points=(
-            (-7.0612, 110.4338),  # Kos Mulawarman
-            (-7.0562, 110.4402),  # Kos Gondang
-            (-7.0558, 110.4368),  # Kos Banjarsari
+            (-7.067588, 110.439708),  # Kos Mulawarman
+            (-7.062817, 110.440401),  # Kos Gondang
+            (-7.059141, 110.435523),  # Kos Banjarsari
         ),
     )
     poi_bar = POI(
         name="bar",
-        lat=float(os.getenv("BAR_LAT", "-6.9680")),
-        lon=float(os.getenv("BAR_LON", "110.4285")),
+        lat=float(os.getenv("BAR_LAT", "-6.966984")),
+        lon=float(os.getenv("BAR_LON", "110.429807")),
         radius_m=float(os.getenv("BAR_RADIUS_M", "100.0")),
-        # Mencakup RedHare Kota Lama, Marabunta Kota Lama, dan Golden Tiger Semarang Bawah
+        # Mencakup RedHare, Marabunta, Golden Tiger, dan HW Tiger Club
         sub_points=(
-            (-6.9680, 110.4285),  # RedHare Kota Lama
-            (-6.9691, 110.4272),  # Marabunta Kota Lama
-            (-7.0016, 110.4452),  # Golden Tiger Semarang Bawah
+            (-6.976429, 110.412950),  # RedHare Semarang
+            (-6.966445, 110.430036),  # Marabunta Kota Lama
+            (-6.966984, 110.429807),  # Golden Tiger Semarang
+            (-6.965717, 110.429464),  # HW Tiger Club Semarang
         ),
     )
 

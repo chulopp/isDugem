@@ -20,7 +20,7 @@ Semua modul (`edge`, `server`, dan `dashboard`) **WAJIB** mengikuti nama topik, 
 
 | Topik | Publisher | Subscriber | QoS | Keterangan |
 |---|---|---|---|---|
-| `rantauguard/{PROJECT_ID}/edge/anak/telemetry` | Edge Anak | Server | 1 | Telemetri sensor berkala (GPS, audio dB, accelerometer) setiap 2–3 detik |
+| `rantauguard/{PROJECT_ID}/edge/anak/telemetry` | Edge Anak | Server | 1 | Telemetri sensor berkala (GPS, audio dB, accelerometer) setiap 2-3 detik |
 | `rantauguard/{PROJECT_ID}/edge/ortu/telemetry` | Edge Ortu | Server | 1 | Telemetri posisi & status goyangan (shake) HP ortu |
 | `rantauguard/{PROJECT_ID}/alerts` | Server | Edge Anak, Edge Ortu, Dashboard | 1 | Hasil klasifikasi status dan evaluasi aturan dari server |
 | `rantauguard/{PROJECT_ID}/command/ping` | Edge Ortu, Dashboard | Edge Anak, Server | 1 | Perintah cek status / getar HP anak |
@@ -32,7 +32,7 @@ Semua modul (`edge`, `server`, dan `dashboard`) **WAJIB** mengikuti nama topik, 
 ## 3. Spesifikasi Payload JSON
 
 ### 3.1 `rantauguard/{PROJECT_ID}/edge/anak/telemetry`
-Dipublish oleh `edge/anak` secara berkala (tiap 2–3 detik):
+Dipublish oleh `edge/anak` secara berkala (tiap 2-3 detik):
 ```json
 {
   "device_id": "anak",
@@ -150,4 +150,4 @@ Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboa
 | `jam_malam` | ≤ 50m kos (`claimed_at_kos=true`) | > 80 dB | `ANOMALY_FAKE_GPS` (Prioritas Tinggi) |
 | `jam_malam` | ≤ 50m kos | < 55 dB | `ISTIRAHAT_DI_KOS` |
 | `jam_malam` | ≤ 100m bar | > 75 dB | `CRITICAL_TERDETEKSI_DI_BAR` |
-| lainnya | — | — | `NORMAL` |
+| lainnya | - | - | `NORMAL` |

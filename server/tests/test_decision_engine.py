@@ -106,16 +106,16 @@ def test_multi_spot_geofence_undip_and_kotalama():
     from server.processing.haversine import haversine_distance_m
 
     cfg = load_config()
-    # Cek jarak titik Kos Gondang (-7.0562, 110.4402) ke cluster kos
+    # Cek jarak titik Kos Gondang (-7.062817, 110.440401) ke cluster kos
     dist_gondang = min(
-        haversine_distance_m(-7.0562, 110.4402, p[0], p[1])
+        haversine_distance_m(-7.062817, 110.440401, p[0], p[1])
         for p in cfg.poi_kos.sub_points
     )
     assert dist_gondang < 5.0
 
-    # Cek jarak titik Golden Tiger (-7.0016, 110.4452) ke cluster bar
+    # Cek jarak titik Golden Tiger (-6.966984, 110.429807) ke cluster bar
     dist_goldentiger = min(
-        haversine_distance_m(-7.0016, 110.4452, p[0], p[1])
+        haversine_distance_m(-6.966984, 110.429807, p[0], p[1])
         for p in cfg.poi_bar.sub_points
     )
     assert dist_goldentiger < 5.0
