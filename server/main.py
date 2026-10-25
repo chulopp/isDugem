@@ -54,11 +54,15 @@ class RantauGuardServer:
         audio = payload.get("audio", {})
         db_level = float(audio.get("db", 0.0))
 
-        # Hitung jarak ke setiap POI menggunakan formula Haversine
-        dist_kampus = haversine_distance_m(lat, lon, self.config.poi_kampus.lat, self.config.poi_kampus.lon)
-        dist_masjid = haversine_distance_m(lat, lon, self.config.poi_masjid.lat, self.config.poi_masjid.lon)
-        dist_kos = haversine_distance_m(lat, lon, self.config.poi_kos.lat, self.config.poi_kos.lon)
-        dist_bar = haversine_distance_m(lat, lon, self.config.poi_bar.lat, self.config.poi_bar.lon)
+        # Hitung jarak terdekat ke setiap kategori POI menggunakan formula Haversine
+        def min_poi_dist(poi):
+            points = poi.sub_points if poi.sub_points else ((poi.lat, poi.lon),)
+            return min(haversine_distance_m(lat, lon, p[0], p[1]) for p in points)
+
+        dist_kampus = min_poi_dist(self.config.poi_kampus)
+        dist_masjid = min_poi_dist(self.config.poi_masjid)
+        dist_kos = min_poi_dist(self.config.poi_kos)
+        dist_bar = min_poi_dist(self.config.poi_bar)
 
         claimed_at_kos = dist_kos <= self.config.poi_kos.radius_m
         time_label = get_current_time_label()

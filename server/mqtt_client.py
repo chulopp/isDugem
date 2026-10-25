@@ -9,7 +9,10 @@ import sys
 from typing import Callable, Any
 import paho.mqtt.client as mqtt
 
-from .config import AppConfig
+try:
+    from .config import AppConfig
+except ImportError:
+    from config import AppConfig
 
 
 class ServerMqttClient:
