@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Dict, Any
 
-
 class AlertStatus(str, Enum):
     SEDANG_KULIAH = "SEDANG_KULIAH"
     ALERT_BOLOS_KULIAH = "ALERT_BOLOS_KULIAH"
