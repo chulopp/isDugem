@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   title: "ISDUGEM?! | Sistem Pemantauan IoT",
   description:
     "Sistem pemantauan lokasi, tingkat suara, dan gerak perangkat berbasis MQTT.",
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
