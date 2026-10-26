@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import logging
 import ssl
+import certifi
 import uuid
 from typing import Any, Callable, Dict, Optional, Sequence
 import paho.mqtt.client as mqtt
@@ -24,7 +25,7 @@ class MqttClient:
         )
 
         if cfg.mqtt_use_tls:
-            context = ssl.create_default_context()
+            context = ssl.create_default_context(cafile=certifi.where())
             context.minimum_version = ssl.TLSVersion.TLSv1_2
             self._client.tls_set_context(context)
         if cfg.mqtt_username:
