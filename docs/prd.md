@@ -2,7 +2,7 @@
 ### Smart Student & Parental Guardian System
 **Mata Kuliah:** Internet of Things — Tugas Praktek Multicommunication 2 Arah & Multisensor
 **Tim:** 3 orang · **Deadline:** 1 minggu dari briefing tugas
-**Versi dokumen:** v2.1 — All-in-One Vercel HTTPS Cloud Deployment (Next.js App Router)
+**Versi dokumen:** v2 — detail teknis untuk eksekusi (manusia & AI coding agent)
 
 ---
 
@@ -35,33 +35,32 @@ Mahasiswa rantau sering sulit dipantau orang tua: GPS saja bisa dimanipulasi (*f
 | 6 | Dashboard satu jaringan (opsional) | Dibuat sebagai fitur andalan — Next.js app |
 | 7 | Ide tidak boleh sama kelompok lain | Kombinasi GPS+Audio+shake-to-ping, belum ada di contoh dosen |
 
-## 4. Tech Stack & Deployment Architecture
+## 4. Tech Stack
 
 | Modul | Stack | Alasan |
 |---|---|---|
-| Edge device (Anak & Ortu) | **Next.js App Router Client Pages (`/anak`, `/ortu`)** (Geolocation API + Web Audio API + DeviceMotion API) dengan fallback file statis di `edge/` | Berjalan di browser HP via HTTPS resmi Vercel, bebas pembatasan sensor browser, scan via QR code tanpa install APK |
+| Edge device (Anak & Ortu) | **Web app** (HTML/JS statis, Geolocation API + Web Audio API + DeviceMotion API), dieksekusi di browser HP (Chrome/Safari) | Tidak butuh install apk, langsung bisa dipakai di Android & iPhone, mirip pola `iot.myudak.com` di contoh dosen |
 | Backend processing | **Python 3.11+**, `paho-mqtt`, `python-dotenv` | Sesuai contoh dosen (PocketGuard), mudah untuk logic Haversine/RMS/decision table |
-| Dashboard (Command Center) | **Next.js 14 (App Router) + TypeScript + Tailwind CSS** di rute utama `/` | Komponen reusable, mudah bikin UI "gokil" (peta live CartoDB, visualizer, command center, simulator demo) |
-| Cloud Hosting Web | **Vercel** (Single All-in-One Deployment) | Menyediakan domain HTTPS gratis otomatis, akses via QR code, mencegah pemblokiran sensor di Android & iOS |
+| Dashboard | **Next.js 14 (App Router) + TypeScript + Tailwind CSS** | Komponen reusable, mudah bikin UI "gokil" (peta live, visualizer, command center), AI agent lebih familiar generate kode Next.js terstruktur dibanding HTML statis panjang |
 | Peta | `react-leaflet` + CartoDB Dark Matter tile | Dark mode map, ringan, gratis |
 | Grafik histori | `recharts` | Native React, gampang di-style dark mode |
-| MQTT di browser | `mqtt` (npm package, MQTT over WebSocket/WSS port 8884) | Standar untuk komunikasi real-time dari browser HP dan laptop |
-| Broker | HiveMQ publik — `broker.hivemq.com` (8883 TLS untuk server, 8884 WSS untuk web browser) | Gratis, tanpa akun, dipakai di contoh dosen |
+| MQTT di browser (dashboard) | `mqtt` (npm package, MQTT over WebSocket) | Standar untuk MQTT dari browser |
+| Broker | HiveMQ publik — `broker.hivemq.com` (8883 TLS untuk edge, 8884 WSS untuk dashboard) | Gratis, tanpa akun, dipakai di contoh dosen |
 
-> Catatan Arsitektur Vercel: Dashboard (`/`), HP Anak (`/anak`), dan HP Ortu (`/ortu`) disatukan dalam satu proyek Next.js yang di-deploy ke Vercel. Dengan demikian, tim hanya memiliki 1 domain HTTPS resmi (misal: `https://isdugem.vercel.app`). HP anak dan HP ortu cukup memindai QR Code untuk membuka antarmuka masing-masing dengan izin mikrofon & GPS yang langsung aktif tanpa hambatan keamanan browser HTTP.
+> Catatan: Edge device TETAP web app biasa (bukan Next.js) karena harus dibuka langsung sebagai 1 file statis di HP tanpa build step, supaya cepat di-debug saat demo. Next.js dipakai khusus untuk **dashboard**, karena dashboard dibuka di laptop dan butuh dev server (`next dev`) yang mudah di-run.
 
 ## 5. Struktur Repo (Monorepo)
 
 ```
-isDugem/
+rantauguard/
 ├── README.md
 ├── .gitignore
 ├── .env.example                    # referensi semua env var lintas modul
 ├── docs/
-│   ├── prd.md                      # dokumen PRD v2.1
+│   ├── prd.md                      # dokumen ini
 │   ├── mqtt-schema.md              # kontrak payload MQTT (Bagian 7)
 │   └── demo-script.md              # skenario demo untuk presentasi
-├── edge/                           # Implementasi standalone fallback (HTML/JS statis)
+├── edge/
 │   ├── anak/
 │   │   ├── index.html
 │   │   ├── app.js
@@ -86,33 +85,28 @@ isDugem/
 │       ├── test_haversine.py
 │       ├── test_audio_rms.py
 │       └── test_decision_engine.py
-└── dashboard/                      # Next.js 14 App (Hosting Vercel - Anggota 1 & 3)
+└── dashboard/                      # Next.js app (Anggota 3)
     ├── package.json
     ├── tsconfig.json
     ├── tailwind.config.ts
     ├── .env.local.example
     ├── app/
     │   ├── layout.tsx
-    │   ├── globals.css
-    │   ├── page.tsx                # Rute Utama: Dashboard Laptop Ortu (Anggota 3)
-    │   ├── anak/
-    │   │   └── page.tsx            # Rute HP Anak: Sensor GPS, Audio dB, Accel (Anggota 1)
-    │   └── ortu/
-    │       └── page.tsx            # Rute HP Ortu: Shake-to-Ping & Remote (Anggota 1)
+    │   ├── page.tsx                 # halaman utama dashboard
+    │   └── globals.css
     ├── components/
-    │   ├── MapPanel.tsx            # peta dark-mode + geofence
-    │   ├── AudioVisualizer.tsx     # equalizer live
-    │   ├── StatusCard.tsx          # status klasifikasi besar
-    │   ├── CommandCenter.tsx       # tombol alarm/pengingat/ping
-    │   ├── DemoPresetPanel.tsx     # simulasi jam & lokasi
-    │   └── HistoryChart.tsx        # grafik jarak & dB
+    │   ├── MapPanel.tsx             # peta dark-mode + geofence
+    │   ├── AudioVisualizer.tsx      # equalizer live
+    │   ├── StatusCard.tsx           # status klasifikasi besar
+    │   ├── CommandCenter.tsx        # tombol alarm/pengingat/ping
+    │   ├── DemoPresetPanel.tsx      # simulasi jam & lokasi
+    │   └── HistoryChart.tsx         # grafik jarak & dB
     ├── hooks/
-    │   ├── useMqtt.ts              # koneksi MQTT WebSocket + subscribe
-    │   └── useTelemetryStore.ts    # state telemetry terkini + histori
+    │   ├── useMqtt.ts               # koneksi MQTT WebSocket + subscribe
+    │   └── useTelemetryStore.ts     # state telemetry terkini + histori
     ├── lib/
-    │   ├── mqttTopics.ts           # konstanta topic (Bagian 7)
-    │   ├── types.ts                # TypeScript types kontrak data
-    │   └── mockData.ts             # data dummy untuk pengujian lokal
+    │   ├── mqttTopics.ts            # konstanta topic (Bagian 7)
+    │   └── types.ts                 # TypeScript types kontrak data
     └── public/
 ```
 
@@ -379,10 +373,10 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 ## 10. Pembagian Tugas (3 Orang)
 
 ### 👤 Anggota 1 — Edge Device Lead
-- Folder: `dashboard/app/anak/`, `dashboard/app/ortu/` (dan fallback `edge/`). Branch prefix: `edge/`.
+- Folder: `edge/anak/`, `edge/ortu/`. Branch prefix: `edge/`.
 - Implementasi Geolocation API, Web Audio API (RMS→dB di sisi client untuk validasi), DeviceMotion untuk shake detection.
 - Publish/subscribe MQTT sesuai kontrak Bagian 7.2/7.3/7.5.
-- UI mobile modern responsif di HP: status koneksi, gauge sensor, notifikasi alert masuk, tombol manual darurat.
+- UI minimal di HP: status koneksi, notifikasi alert masuk, tombol manual darurat.
 
 ### 👤 Anggota 2 — Backend Processing & Algoritma Lead
 - Folder: `server/`. Branch prefix: `server/`.
@@ -391,8 +385,8 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 - Jaga konsistensi skema payload — review PR dari edge & dashboard untuk hal ini.
 
 ### 👤 Anggota 3 — **Dashboard Lead (fokus "gokil", Next.js)**
-- Folder: `dashboard/app/page.tsx` & `dashboard/components/`. Branch prefix: `dashboard/`.
-- Setup project Next.js + Tailwind + react-leaflet + recharts + mqtt (Hosting Vercel).
+- Folder: `dashboard/`. Branch prefix: `dashboard/`.
+- Setup project Next.js + Tailwind + react-leaflet + recharts + mqtt.
 - Bangun semua komponen di Bagian 8.7, styling dark theme, animasi smooth.
 - Buat `DemoPresetPanel` jadi senjata utama saat presentasi (bisa jalan tanpa HP fisik).
 
@@ -402,10 +396,10 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 
 | Hari | Target |
 |---|---|
-| 1 | Setup repo + branching, isi `docs/mqtt-schema.md`, setup broker & `.env.example`, inisialisasi Next.js project + deploy Vercel |
+| 1 | Setup repo + branching, isi `docs/mqtt-schema.md`, setup broker & `.env.example`, inisialisasi Next.js project |
 | 2–3 | Edge publish telemetry dummy → Server subscribe & proses (Haversine, dB) jalan dengan mock |
 | 3–4 | Decision engine lengkap + unit test lulus; Dashboard komponen utama (Map, StatusCard) render dengan mock data |
-| 4–5 | Integrasi nyata: Edge asli via HP Vercel → Server → Dashboard (ganti mock jadi data live) |
+| 4–5 | Integrasi nyata: Edge asli → Server → Dashboard (ganti mock jadi data live) |
 | 6 | DemoPresetPanel, Command Center, testing semua skenario di Bagian 12, merge `develop` → `main` |
 | 7 | Rekam video demo, susun PPT, finalisasi README |
 
@@ -418,7 +412,7 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 - [ ] Shake-to-ping dari HP ortu memicu respons di HP anak
 - [ ] Dashboard Next.js menampilkan peta, visualizer, status live tanpa delay signifikan
 - [ ] DemoPresetPanel bisa mensimulasikan seluruh skenario tanpa jalan kaki fisik
-- [ ] Semua perangkat terhubung via internet HTTPS Vercel & broker publik HiveMQ (bebas dari provider manapun, tidak terikat 1 WiFi lokal)
+- [ ] Semua perangkat terhubung satu jaringan saat demo
 - [ ] `develop` sudah di-merge ke `main`, tidak ada konflik tersisa
 
 ## 13. Risiko & Mitigasi
@@ -429,7 +423,7 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 | Mikrofon HP beda sensitivitas antar perangkat | Kalibrasi threshold dB saat testing H-4/H-5 |
 | Broker publik down/delay saat presentasi | Siapkan broker cadangan (EMQX) di `.env`, tes H-5 |
 | Konflik merge antar branch (skema payload beda) | Kontrak Bagian 7 adalah sumber kebenaran tunggal — review PR wajib cek ini |
-| iPhone/Android browser restriksi Web Audio/Geolocation | **Mitigasi Selesai:** Hosting Vercel menyediakan domain HTTPS resmi otomatis, izin sensor langsung disetujui browser smartphone tanpa diblokir |
+| iPhone browser restriksi Web Audio/Geolocation | Pastikan dibuka via HTTPS (bukan HTTP), minta izin eksplisit, fallback mock di demo |
 
 ## 14. Deliverables
 
