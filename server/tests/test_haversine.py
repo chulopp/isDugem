@@ -4,11 +4,11 @@ import pytest
 
 from processing.haversine import EARTH_RADIUS_M, haversine_distance_m
 
-# Titik POI default (docs/mqtt-schema.md bagian 4)
-KAMPUS = (-6.9915, 110.4210)
-MASJID = (-6.9930, 110.4195)
-KOS = (-6.9940, 110.4225)
-BAR = (-6.9960, 110.4240)
+# Titik POI default (UNDIP Tembalang & Semarang Bawah)
+KAMPUS = (-7.0502, 110.4398)
+MASJID = (-7.0552, 110.4370)
+KOS = (-7.0632, 110.4385)
+BAR = (-6.966984, 110.429807)
 
 
 def test_same_point_is_zero():
@@ -48,12 +48,10 @@ def test_geofence_kos_dan_bar_tidak_tumpang_tindih():
     assert haversine_distance_m(*KOS, *BAR) > 50 + 100
 
 
-def test_kampus_dan_masjid_default_sedikit_tumpang_tindih_tapi_aman():
-    # Jarak ~235 m < 150 + 100 m: lingkaran di peta saling beririsan ~15 m. Aman untuk logika
-    # karena kampus (jam_kuliah) dan masjid (waktu_sholat) tidak pernah dievaluasi bersamaan.
+def test_kampus_dan_masjid_terpisah_jarak_nyata():
+    # Jarak nyata Kampus UNDIP ke Maskam UNDIP adalah ~636 m.
     d = haversine_distance_m(*KAMPUS, *MASJID)
-    assert 234.0 < d < 236.0
-    assert d < 150 + 100
+    assert 630.0 < d < 645.0
 
 
 def test_known_short_distance_about_111m_per_millidegree():

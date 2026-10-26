@@ -14,10 +14,10 @@ from dotenv import load_dotenv
 POI_NAMES: Tuple[str, ...] = ("kampus", "masjid", "kos", "bar")
 
 DEFAULT_POI: Dict[str, str] = {
-    "kampus": "-6.9915,110.4210,150",
-    "masjid": "-6.9930,110.4195,100",
-    "kos": "-6.9940,110.4225,50",
-    "bar": "-6.9960,110.4240,100",
+    "kampus": "-7.0502,110.4398,150",
+    "masjid": "-7.0552,110.4370,100",
+    "kos": "-7.0632,110.4385,750",
+    "bar": "-6.966984,110.429807,250",
 }
 
 class ConfigError(ValueError):
@@ -59,6 +59,12 @@ def parseWindows(text: str) -> Tuple[rangeTime, ...]:
     return tuple(parseWindow(p) for p in items)
 
 def parsePOI(name: str, text: str) -> POI:
+    lat_env = os.getenv(f"{name.upper()}_LAT")
+    lon_env = os.getenv(f"{name.upper()}_LON")
+    rad_env = os.getenv(f"{name.upper()}_RADIUS_M")
+    if lat_env and lon_env and rad_env and not os.getenv(f"POI_{name.upper()}"):
+        text = f"{lat_env},{lon_env},{rad_env}"
+
     parts = [p.strip() for p in text.split(",")]
     if len(parts) != 3:
         raise ConfigError(f"POI_{name.upper()} harus 'lat,lon,radius_m', dapat: {text!r}")
@@ -206,7 +212,7 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         timezone=tz_name,
         use_server_clock=_env_bool("USE_SERVER_CLOCK", False),
         kuliah_window=parseWindow(_env_str("KULIAH_WINDOW", "08:00-15:00")),
-        sholat_windows=parseWindows(_env_str("SHOLAT_WINDOWS", "12:00-12:45")),
+        sholat_windows=parseWindows(_env_str("SHOLAT_WINDOWS", "12:00-12:45,15:15-15:45,18:00-18:30,19:15-19:45")),
         malam_window=parseWindow(_env_str("MALAM_WINDOW", "22:00-05:00")),
         poi=poi,
         alert_heartbeat_s=heartbeat,

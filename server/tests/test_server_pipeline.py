@@ -62,7 +62,7 @@ def test_topik_sesuai_kontrak(server):
 
 def test_skenario_sedang_kuliah(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9915, 110.4210, rms=0.001, hh=9))   # 40 dB, di kampus
+    push(srv, cfg, anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, rms=0.001, hh=9))   # 40 dB, di kampus
     assert sent[-1][0] == cfg.topic_alerts
     assert sent[-1][1]["status"] == Status.SEDANG_KULIAH
     assert sent[-1][1]["context"]["time_label"] == "jam_kuliah"
@@ -70,19 +70,19 @@ def test_skenario_sedang_kuliah(server):
 
 def test_skenario_bolos(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9960, 110.4240, hh=10))           # di bar saat jam kuliah
+    push(srv, cfg, anak_payload(cfg.poi['bar'].lat, cfg.poi['bar'].lon, hh=10))           # di bar saat jam kuliah
     assert sent[-1][1]["status"] == Status.ALERT_BOLOS_KULIAH
 
 
 def test_skenario_warning_masjid_pada_jam_dzuhur(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9940, 110.4225, hh=12, mm=5))      # di kos saat dzuhur
+    push(srv, cfg, anak_payload(cfg.poi['kos'].lat, cfg.poi['kos'].lon, hh=12, mm=5))      # di kos saat dzuhur
     assert sent[-1][1]["status"] == Status.WARNING_BELUM_KE_MASJID
 
 
 def test_skenario_bar_malam(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9960, 110.4240, rms=0.12, hh=23, mm=10))  # ~81.6 dB
+    push(srv, cfg, anak_payload(cfg.poi['bar'].lat, cfg.poi['bar'].lon, rms=0.12, hh=23, mm=10))  # ~81.6 dB
     payload = sent[-1][1]
     assert payload["status"] == Status.CRITICAL_TERDETEKSI_DI_BAR
     assert payload["context"]["nearest_poi"] == "bar"
@@ -91,29 +91,29 @@ def test_skenario_bar_malam(server):
 
 def test_skenario_andalan_anomaly_fake_gps(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9940, 110.4225, rms=0.2, hh=23, mm=30))   # ~86 dB di kos
+    push(srv, cfg, anak_payload(cfg.poi['kos'].lat, cfg.poi['kos'].lon, rms=0.2, hh=23, mm=30))   # ~86 dB di kos
     assert sent[-1][1]["status"] == Status.ANOMALY_FAKE_GPS
 
 
 def test_skenario_istirahat_di_kos(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9940, 110.4225, rms=0.0005, hh=23, mm=30))  # ~34 dB
+    push(srv, cfg, anak_payload(cfg.poi['kos'].lat, cfg.poi['kos'].lon, rms=0.0005, hh=23, mm=30))  # ~34 dB
     assert sent[-1][1]["status"] == Status.ISTIRAHAT_DI_KOS
 
 
 def test_publish_hanya_saat_status_berubah(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9915, 110.4210, seq=1))
-    push(srv, cfg, anak_payload(-6.9915, 110.4210, seq=2))
-    push(srv, cfg, anak_payload(-6.9915, 110.4210, seq=3))
+    push(srv, cfg, anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, seq=1))
+    push(srv, cfg, anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, seq=2))
+    push(srv, cfg, anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, seq=3))
     assert len(sent) == 1
-    push(srv, cfg, anak_payload(-6.9960, 110.4240, seq=4))   # pindah -> bolos
+    push(srv, cfg, anak_payload(cfg.poi['bar'].lat, cfg.poi['bar'].lon, seq=4))   # pindah -> bolos
     assert len(sent) == 2
 
 
 def test_duplikat_qos1_dibuang(server):
     srv, sent, cfg = server
-    p = anak_payload(-6.9915, 110.4210, seq=7)
+    p = anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, seq=7)
     push(srv, cfg, p)
     push(srv, cfg, p)
     assert len(sent) == 1
@@ -122,7 +122,7 @@ def test_duplikat_qos1_dibuang(server):
 
 def test_payload_alert_sesuai_skema(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9915, 110.4210))
+    push(srv, cfg, anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon))
     alert = sent[-1][1]
     assert set(alert) == {"status", "reason", "timestamp_ms", "context"}
     assert set(alert["context"]) == {"time_label", "nearest_poi", "distance_m", "db"}
@@ -140,7 +140,7 @@ def test_payload_rusak_tidak_membuat_server_crash(server):
 
 def test_ping_republish_alert_terakhir(server):
     srv, sent, cfg = server
-    push(srv, cfg, anak_payload(-6.9915, 110.4210))
+    push(srv, cfg, anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon))
     srv.handle_message(
         cfg.topic_command_ping,
         json.dumps({"triggered_by": "ortu", "timestamp_ms": 1, "message": "cek"}).encode(),
@@ -169,13 +169,13 @@ def test_telemetri_ortu_disimpan(server):
 def test_db_dihitung_dari_rms_bukan_dari_field_db(server):
     srv, sent, cfg = server
     # rms 0.2 -> ~86 dB walau field db mengaku 40 -> tetap ANOMALY (server = sumber hitung)
-    push(srv, cfg, anak_payload(-6.9940, 110.4225, rms=0.2, db=40.0, hh=23, mm=30))
+    push(srv, cfg, anak_payload(cfg.poi['kos'].lat, cfg.poi['kos'].lon, rms=0.2, db=40.0, hh=23, mm=30))
     assert sent[-1][1]["status"] == Status.ANOMALY_FAKE_GPS
 
 
 def test_fallback_ke_field_db_jika_rms_tidak_ada(server):
     srv, sent, cfg = server
-    payload = anak_payload(-6.9940, 110.4225, hh=23, mm=30)
+    payload = anak_payload(cfg.poi['kos'].lat, cfg.poi['kos'].lon, hh=23, mm=30)
     payload["audio"] = {"db": 90.0}
     push(srv, cfg, payload)
     assert sent[-1][1]["status"] == Status.ANOMALY_FAKE_GPS
@@ -187,12 +187,12 @@ def test_heartbeat_publish_ulang(env, monkeypatch):
     now = [1_790_000_000.0]
     sent = []
     srv = GuardianServer(cfg, lambda t, p: sent.append(p), clock=lambda: now[0])
-    srv.handle_message(cfg.topic_anak_telemetry, json.dumps(anak_payload(-6.9915, 110.4210, seq=1)).encode())
+    srv.handle_message(cfg.topic_anak_telemetry, json.dumps(anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, seq=1)).encode())
     now[0] += 10
-    srv.handle_message(cfg.topic_anak_telemetry, json.dumps(anak_payload(-6.9915, 110.4210, seq=2)).encode())
+    srv.handle_message(cfg.topic_anak_telemetry, json.dumps(anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, seq=2)).encode())
     assert len(sent) == 1
     now[0] += 25
-    srv.handle_message(cfg.topic_anak_telemetry, json.dumps(anak_payload(-6.9915, 110.4210, seq=3)).encode())
+    srv.handle_message(cfg.topic_anak_telemetry, json.dumps(anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, seq=3)).encode())
     assert len(sent) == 2
 
 
@@ -202,7 +202,7 @@ def test_use_server_clock(env, monkeypatch):
     sent = []
     # 1_790_000_000 s = 2026-09-21 ~ 13:33 WIB -> 'lainnya' -> NORMAL walau sent_at_ms bilang 09:00
     srv = GuardianServer(cfg, lambda t, p: sent.append(p), clock=lambda: 1_790_000_000.0)
-    srv.handle_message(cfg.topic_anak_telemetry, json.dumps(anak_payload(-6.9915, 110.4210, hh=9)).encode())
+    srv.handle_message(cfg.topic_anak_telemetry, json.dumps(anak_payload(cfg.poi['kampus'].lat, cfg.poi['kampus'].lon, hh=9)).encode())
     assert sent[-1]["context"]["time_label"] == "lainnya"
 
 
