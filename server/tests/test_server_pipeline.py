@@ -159,7 +159,7 @@ def test_telemetri_ortu_disimpan(server):
     srv, _, cfg = server
     payload = {
         "device_id": "ortu", "sequence": 3, "sent_at_ms": 1,
-        "location": {"lat": -6.995, "lon": 110.421},
+        "location": {"lat": -7.054, "lon": 110.438},
         "motion": {"accel_magnitude": 20.0, "shake_detected": True},
     }
     srv.handle_message(cfg.topic_ortu_telemetry, json.dumps(payload).encode())

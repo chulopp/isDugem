@@ -39,8 +39,8 @@ Dipublish oleh `edge/anak` secara berkala (tiap 2-3 detik):
   "sequence": 42,
   "sent_at_ms": 1790000000000,
   "location": {
-    "lat": -6.9929,
-    "lon": 110.4203,
+    "lat": -7.0502,
+    "lon": 110.4398,
     "accuracy_m": 8.5
   },
   "audio": {
@@ -61,8 +61,8 @@ Dipublish oleh `edge/ortu` secara berkala atau saat terjadi event:
   "sequence": 17,
   "sent_at_ms": 1790000000000,
   "location": {
-    "lat": -6.9950,
-    "lon": 110.4210
+    "lat": -7.0540,
+    "lon": 110.4380
   },
   "motion": {
     "accel_magnitude": 9.8,
@@ -113,30 +113,31 @@ Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboa
 ```json
 {
   "kampus": { "lat": -7.0502, "lon": 110.4398, "radius_m": 150 },
-  "masjid": { "lat": -7.0519, "lon": 110.4398, "radius_m": 100 },
+  "masjid": { "lat": -7.0552, "lon": 110.4370, "radius_m": 100 },
   "kos": {
-    "lat": -7.0612,
-    "lon": 110.4338,
-    "radius_m": 50,
+    "lat": -7.0632,
+    "lon": 110.4385,
+    "radius_m": 750,
     "sub_points": [
-      { "name": "Kos Mulawarman", "lat": -7.0612, "lon": 110.4338 },
-      { "name": "Kos Gondang", "lat": -7.0562, "lon": 110.4402 },
-      { "name": "Kos Banjarsari", "lat": -7.0558, "lon": 110.4368 }
+      { "name": "Kos Mulawarman", "lat": -7.067588, "lon": 110.439708 },
+      { "name": "Kos Gondang", "lat": -7.062817, "lon": 110.440401 },
+      { "name": "Kos Banjarsari", "lat": -7.059141, "lon": 110.435523 }
     ]
   },
   "bar": {
-    "lat": -6.9680,
-    "lon": 110.4285,
-    "radius_m": 100,
+    "lat": -6.966984,
+    "lon": 110.429807,
+    "radius_m": 250,
     "sub_points": [
-      { "name": "RedHare Kota Lama", "lat": -6.9680, "lon": 110.4285 },
-      { "name": "Marabunta Kota Lama", "lat": -6.9691, "lon": 110.4272 },
-      { "name": "Golden Tiger Semarang", "lat": -7.0016, "lon": 110.4452 }
+      { "name": "RedHare Semarang", "lat": -6.976429, "lon": 110.412950 },
+      { "name": "Marabunta Kota Lama", "lat": -6.966445, "lon": 110.430036 },
+      { "name": "Golden Tiger Semarang", "lat": -6.966984, "lon": 110.429807 },
+      { "name": "HW Tiger Club Semarang", "lat": -6.965717, "lon": 110.429464 }
     ]
   }
 }
 ```
-*(Catatan: Koordinat dapat disesuaikan di file `.env` masing-masing modul sesuai area demo).*
+*(Catatan: Koordinat dikonfigurasi melalui file `.env` masing-masing modul: `POI_KAMPUS`, `POI_MASJID`, `POI_KOS`, `POI_BAR`).*
 
 ---
 
