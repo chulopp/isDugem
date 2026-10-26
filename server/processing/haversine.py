@@ -1,26 +1,13 @@
-"""
-Haversine formula implementation for geofence distance calculation.
-Radius Earth: R = 6,371,000 meters.
-"""
+from __future__ import annotations
+from math import asin, cos, radians, sin, sqrt
 
-import math
-
+EARTH_RADIUS_M = 6_371_000.0
 
 def haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """
-    Return distance in meters between two lat/lon points using the Haversine formula.
-    """
-    R = 6_371_000.0  # Radius bumi dalam meter
+    phi1, phi2 = radians(lat1), radians(lat2)
+    d_phi = radians(lat2 - lat1)
+    d_lambda = radians(lon2 - lon1)
 
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lon2 - lon1)
-
-    a = (
-        math.sin(delta_phi / 2.0) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
-    )
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-
-    return R * c
+    a = sin(d_phi / 2.0) ** 2 + cos(phi1) * cos(phi2) * sin(d_lambda / 2.0) ** 2
+    a = min(1.0, max(0.0, a))
+    return 2.0 * EARTH_RADIUS_M * asin(sqrt(a))
