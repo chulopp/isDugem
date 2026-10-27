@@ -21,7 +21,7 @@ FAR = 5000.0
 
 def ctx(time_label, kampus=FAR, masjid=FAR, kos=FAR, bar=FAR, db=40.0, claimed=None):
     if claimed is None:
-        claimed = kos <= 50
+        claimed = kos <= 750
     return Context(time_label, kampus, masjid, kos, bar, db, claimed)
 
 
@@ -91,7 +91,7 @@ def test_bar_boundary_db_75_bukan_critical():
 
 
 def test_bar_terlalu_jauh_normal():
-    assert classify(ctx(JAM_MALAM, bar=100.1, db=90)) == Status.NORMAL
+    assert classify(ctx(JAM_MALAM, bar=250.1, db=90)) == Status.NORMAL
 
 
 def test_malam_dimana_saja_senyap_normal():

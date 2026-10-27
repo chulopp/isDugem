@@ -113,11 +113,11 @@ Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboa
 ```json
 {
   "kampus": { "lat": -7.0502, "lon": 110.4398, "radius_m": 150 },
-  "masjid": { "lat": -7.0519, "lon": 110.4398, "radius_m": 100 },
+  "masjid": { "lat": -7.0552, "lon": 110.4370, "radius_m": 100 },
   "kos": {
-    "lat": -7.0612,
-    "lon": 110.4338,
-    "radius_m": 50,
+    "lat": -7.0632,
+    "lon": 110.4385,
+    "radius_m": 750,
     "sub_points": [
       { "name": "Kos Mulawarman", "lat": -7.0612, "lon": 110.4338 },
       { "name": "Kos Gondang", "lat": -7.0562, "lon": 110.4402 },
@@ -125,9 +125,9 @@ Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboa
     ]
   },
   "bar": {
-    "lat": -6.9680,
-    "lon": 110.4285,
-    "radius_m": 100,
+    "lat": -6.966984,
+    "lon": 110.429807,
+    "radius_m": 250,
     "sub_points": [
       { "name": "RedHare Kota Lama", "lat": -6.9680, "lon": 110.4285 },
       { "name": "Marabunta Kota Lama", "lat": -6.9691, "lon": 110.4272 },

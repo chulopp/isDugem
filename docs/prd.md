@@ -209,7 +209,7 @@ Setiap folder modul (`edge/anak`, `edge/ortu`, `server`, `dashboard`) wajib puny
 ### 7.4 Payload: `alerts` (dari Server)
 ```json
 {
-  "status": "CRITICAL: TERDETEKSI_DI_BAR",
+  "status": "CRITICAL_TERDETEKSI_DI_BAR",
   "reason": "Jarak ke bar 42m, suara 81.3 dB pada jam 23:10",
   "timestamp_ms": 1790000000000,
   "context": {
@@ -232,10 +232,10 @@ Setiap folder modul (`edge/anak`, `edge/ortu`, `server`, `dashboard`) wajib puny
 Didefinisikan sebagai konstanta yang dipakai server & dashboard (harus identik):
 ```json
 {
-  "kampus": { "lat": -6.9915, "lon": 110.4210, "radius_m": 150 },
-  "masjid": { "lat": -6.9930, "lon": 110.4195, "radius_m": 100 },
-  "kos":    { "lat": -6.9940, "lon": 110.4225, "radius_m": 50 },
-  "bar":    { "lat": -6.9960, "lon": 110.4240, "radius_m": 100 }
+  "kampus": { "lat": -7.0502, "lon": 110.4398, "radius_m": 150 },
+  "masjid": { "lat": -7.0552, "lon": 110.4370, "radius_m": 100 },
+  "kos":    { "lat": -7.0632, "lon": 110.4385, "radius_m": 750 },
+  "bar":    { "lat": -6.966984, "lon": 110.429807, "radius_m": 250 }
 }
 ```
 (Nilai koordinat contoh — ganti dengan titik nyata di sekitar lokasi demo/kampus kelompok.)

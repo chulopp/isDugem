@@ -13,8 +13,8 @@ LAINNYA = "lainnya"
 DEFAULT_RADII_M: Dict[str, float] = {
     "kampus": 150.0,
     "masjid": 100.0,
-    "kos": 50.0,
-    "bar": 100.0,
+    "kos": 750.0,
+    "bar": 250.0,
 }
 
 DB_KULIAH_TENANG_MAX = 65.0   
