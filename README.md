@@ -2,7 +2,8 @@
 ### Smart Student & Parental Guardian System — IoT Multicommunication 2 Arah & Multisensor
 
 [![Status](https://img.shields.io/badge/Status-Active%20Development-blue.svg)](#)
-[![Python Tests](https://img.shields.io/badge/Python%20Tests-16%20Passed-brightgreen.svg)](#)
+[![Python Tests](https://img.shields.io/badge/Python%20Tests-155%20Passed-brightgreen.svg)](#)
+[![Dashboard Tests](https://img.shields.io/badge/Dashboard%20Tests-4%20Passed-brightgreen.svg)](#)
 [![Stack](https://img.shields.io/badge/Stack-Python%20%7C%20Next.js%20%7C%20Web%20Sensors%20%7C%20MQTT-orange.svg)](#)
 
 RantauGuard adalah sistem IoT pemantau mahasiswa rantau terintegrasi dengan validasi **multisensor** (GPS + Mikrofon Suasana Sekitar + Akselerometer) dan **komunikasi dua arah** berbasis protokol MQTT. Sistem ini mampu mendeteksi manipulasi lokasi (*Fake GPS*) melalui verifikasi silang antara koordinat klaim dengan intensitas kebisingan suara ruangan.
@@ -57,9 +58,9 @@ Untuk menghindari kendala **pemblokiran izin mikrofon & GPS oleh browser smartph
 - 📱 **HP Anak (Sensor):** buka `https://isdugem.vercel.app/anak` (scan QR Code)
 - 📱 **HP Ortu (Shake-to-Ping):** buka `https://isdugem.vercel.app/ortu` (scan QR Code)
 
-> ✅ **Keunggulan:**  
-> 1. Bebas dari kendala WiFi kampus (*tidak wajib 1 jaringan WiFi yang sama*).  
-> 2. Izin GPS & Mikrofon otomatis disetujui karena menggunakan protokol **HTTPS terenkripsi resmi**.  
+> ✅ **Keunggulan:**
+> 1. Bebas dari kendala WiFi kampus (*tidak wajib 1 jaringan WiFi yang sama*).
+> 2. Izin GPS & Mikrofon otomatis disetujui karena menggunakan protokol **HTTPS terenkripsi resmi**.
 > 3. Desain antarmuka 100% konsisten menggunakan Tailwind CSS.
 
 ---
@@ -186,26 +187,26 @@ isDugem/
 ## 🚀 Panduan Menjalankan Modul (Quickstart)
 
 ### 1. Modul Server Backend Python (`server/`)
-1. Masuk ke folder server dan buat *virtual environment*:
+1. Masuk ke folder server dan aktifkan *virtual environment* yang sudah terpasang dependensinya:
    ```bash
    cd server
-   python -m venv venv
-   
-   # Aktivasi (Windows PowerShell)
-   .\venv\Scripts\Activate.ps1
-   # Aktivasi (Linux/Mac)
-   source venv/bin/activate
+
+   # Gunakan virtual environment yang sudah tersedia di proyek (.venv315):
+   source .venv315/bin/activate       # Linux/Mac
+   # atau di Windows PowerShell jika dibuat manual:
+   # .\.venv315\Scripts\Activate.ps1
+
+   # ATAU jika menyiapkan virtual environment baru dari awal:
+   # python3 -m venv .venv315 && source .venv315/bin/activate
+   # pip install -r requirements.txt
    ```
-2. Pasang dependensi:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Jalankan pengujian unit test:
+   > ⚠️ **Penting:** Jalankan server selalu di dalam virtual environment (`.venv315`), bukan dengan Python global sistem, karena seluruh pustaka seperti `paho-mqtt` dan `python-dotenv` terpasang di dalamnya.
+2. Jalankan pengujian unit test (verifikasi logika internal):
    ```bash
    pytest
    ```
-   *(Pastikan seluruh 16 pengujian lulus hijau!)*
-4. Jalankan server:
+   *(Memverifikasi seluruh 155 unit test backend lulus hijau).*
+3. Jalankan server:
    ```bash
    python main.py
    ```
@@ -228,6 +229,11 @@ Seluruh antarmuka web (Dashboard Laptop `/`, HP Anak `/anak`, dan HP Ortu `/ortu
    - Dashboard Laptop: [http://localhost:3000](http://localhost:3000)
    - Web HP Anak: [http://localhost:3000/anak](http://localhost:3000/anak)
    - Web HP Ortu: [http://localhost:3000/ortu](http://localhost:3000/ortu)
+
+   > ⚠️ **Catatan Akses Smartphone (HTTP vs HTTPS):**
+   > - Akses peramban laptop via `http://localhost:3000` diperlakukan sebagai *Secure Context*, sehingga seluruh visualisasi dan panel simulasi preset berjalan penuh.
+   > - Jika smartphone mengakses alamat IP lokal non-localhost via HTTP biasa (misal `http://192.168.x.x:3000/anak`), peramban mobile (Chrome Android/Safari iOS) akan **memblokir izin mikrofon dan GPS**.
+   > - Untuk presentasi kelas, disarankan menggunakan **Demo Preset Panel** langsung di laptop (`localhost:3000`). Jika ingin menghubungkan smartphone fisik, gunakan deployment HTTPS resmi (seperti Vercel) atau tunnel HTTPS (seperti Ngrok/Cloudflare Tunnel).
 
 3. **Deploy ke Vercel (Produksi HTTPS Gratis):**
    - Connect repository `chulopp/isDugem` ke akun [Vercel](https://vercel.com).
@@ -258,21 +264,22 @@ Seluruh antarmuka web (Dashboard Laptop `/`, HP Anak `/anak`, dan HP Ortu `/ortu
 - **Port Dashboard:** `8884` (MQTT over Secure WebSocket: `wss://broker.hivemq.com:8884/mqtt`)
 - **Prefix Topik (`PROJECT_ID`):** `isdugem_tim_01` (dapat disesuaikan di `.env`)
 
-Dokumentasi lengkap payload dapat dibaca di:  
-👉 **[docs/mqtt-schema.md](file:///d:/Fallah's%20File/Code/Personal%20Project/isDugem/docs/mqtt-schema.md)**
+Dokumentasi lengkap payload dapat dibaca di:
+👉 **[docs/mqtt-schema.md](docs/mqtt-schema.md)**
 
 ---
 
-## 🎬 Checklist Skenario Demo
+## 🎬 Checklist Skenario Demo & Status Verifikasi
 
-Sebelum presentasi di hadapan dosen, pastikan seluruh skenario ini berjalan lancar:
-- [x] **Unit Testing Server:** 16 pengujian pytest lulus 100%.
-- [ ] **Skenario Normal Kuliah:** Status `SEDANG_KULIAH` muncul saat HP di area kampus dengan audio tenang.
-- [ ] **Skenario Bolos:** Status `ALERT_BOLOS_KULIAH` aktif saat HP menjauh di jam perkuliahan.
-- [ ] **Skenario Pengingat Sholat:** Status `WARNING_BELUM_KE_MASJID` dan tombol reminder mengirim getar ke HP anak.
-- [ ] **Skenario Terdeteksi Bar:** Status `CRITICAL_TERDETEKSI_DI_BAR` aktif jika dekat bar di jam malam dengan dB > 75.
-- [ ] **Skenario Anomaly Fake GPS (Andalan):** Status `ANOMALY_FAKE_GPS` aktif saat koordinat berada di kos tetapi mikrofon mendeteksi suara dentuman > 80 dB!
-- [ ] **Komunikasi 2 Arah:** Goyangkan HP Ortu (*shake*) memicu getar dan alert seketika pada HP Anak.
+Status kesiapan skenario berdasarkan hasil pengujian aktual:
+- [x] **Unit Testing Logika & Model Data:** 155 pengujian Pytest backend dan 4 pengujian Vitest dashboard lulus 100% (menguji formula Haversine, desibel audio, validasi payload, dan fusi tabel keputusan).
+- [x] **Skenario Terdeteksi di Bar (Terverifikasi End-to-End Real UI):** Terbukti secara nyata melalui klik tombol preset pada UI peramban $\rightarrow$ MQTT WSS $\rightarrow$ HiveMQ TLS $\rightarrow$ Server Backend $\rightarrow$ publikasi alert $\rightarrow$ subscriber dashboard $\rightarrow$ status `CRITICAL_TERDETEKSI_DI_BAR` tampil pada kartu dan banner visual dashboard.
+- [x] **Skenario Terverifikasi Logika & Simulasi Server:**
+  - **Skenario Normal Kuliah:** Status `SEDANG_KULIAH` aktif saat lokasi di kampus dengan audio tenang (< 65 dB).
+  - **Skenario Bolos Kuliah:** Status `ALERT_BOLOS_KULIAH` aktif saat lokasi menjauh pada jam kuliah (> 150 m).
+  - **Skenario Pengingat Sholat:** Status `WARNING_BELUM_KE_MASJID` dan tombol reminder mengirim pesan pengingat.
+  - **Skenario Anomali Fake GPS (Andalan):** Status `ANOMALY_FAKE_GPS` aktif saat koordinat berada di kos tetapi mikrofon mendeteksi suara dentuman > 80 dB.
+  - **Komunikasi 2 Arah:** Goyangkan HP Ortu (*shake*) atau tekan tombol remote memicu perintah ke topik `command/*`.
 
-Skrip lengkap pengujian dapat dibaca di:  
-👉 **[docs/demo-script.md](file:///d:/Fallah's%20File/Code/Personal%20Project/isDugem/docs/demo-script.md)**
+Skrip lengkap pengujian dapat dibaca di:
+👉 **[docs/demo-script.md](docs/demo-script.md)**

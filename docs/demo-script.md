@@ -17,6 +17,14 @@ Dokumen ini memandu langkah-langkah demonstrasi sistem IoT RantauGuard (isDugem)
    - [ ] Web app HP Anak dibuka via scan QR Code / browser HP (`https://isdugem.vercel.app/anak`).
    - [ ] Web app HP Ortu dibuka via scan QR Code / browser HP (`https://isdugem.vercel.app/ortu`).
 
+> 💡 **Catatan Mode Demonstrasi & Izin Sensor (HTTP vs HTTPS):**
+> - **Rekomendasi Utama Presentasi:** Gunakan **Demo Preset Panel** langsung di antarmuka peramban laptop (`http://localhost:3000`). Seluruh skenario dapat disimulasikan secara lengkap tanpa perlu membawa smartphone fisik atau berjalan kaki.
+> - **Akses Smartphone Fisik:** Jika ingin menghubungkan smartphone fisik ke rute `/anak` atau `/ortu`, wajib menggunakan domain **HTTPS resmi** (seperti deployment Vercel atau tunnel HTTPS), karena peramban smartphone memblokir akses sensor mikrofon dan GPS pada koneksi HTTP biasa non-localhost.
+>
+> ℹ️ **Status Verifikasi Pengujian:**
+> - **Skenario 4 (Bar Golden Tiger / RedHare):** Telah diverifikasi secara end-to-end melalui klik antarmuka nyata (UI browser) $\rightarrow$ MQTT WSS $\rightarrow$ HiveMQ TLS $\rightarrow$ Server Backend $\rightarrow$ Alerts MQTT $\rightarrow$ Subscriber Dashboard.
+> - **Skenario 1, 2, 3, 5, dan 6:** Telah diverifikasi secara fungsional melalui unit test dan simulasi logika server.
+
 ---
 
 ## 2. Urutan Skenario Pengujian & Bukti Output

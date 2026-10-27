@@ -88,7 +88,7 @@ class GuardianServer:
                 last_sequence, last_sent_at_ms = last_key
 
                 if tel.sequence < last_sequence:
-                    logger.debug(
+                    logger.warning(
                         "Telemetry anak out-of-order dibuang: "
                         "sequence=%d, sequence terakhir=%d",
                         tel.sequence,
@@ -106,6 +106,15 @@ class GuardianServer:
         self.latest_anak = tel
         self._last_anak_received_s = now_s
         alert = self.evaluate(tel, now_s)
+
+        logger.info(
+            "Telemetri anak diproses: seq=%d, status=%s, near=%s (%.1fm), db=%.1f",
+            tel.sequence,
+            alert.status,
+            alert.context.nearest_poi,
+            alert.context.distance_m,
+            alert.context.db,
+        )
 
         # Bandingkan dengan status terakhir yang masih pending,
         # bukan hanya status yang sudah dikonfirmasi broker.
@@ -210,6 +219,12 @@ class GuardianServer:
 
     def _publish_alert(self, alert: Alert, now_s: float) -> None:
         with self._publish_lock:
+            logger.info(
+                "Mempublikasikan alert ke %s: status=%s (%s)",
+                self.cfg.topic_alerts,
+                alert.status,
+                alert.reason,
+            )
             try:
                 result = self._publish(
                     self.cfg.topic_alerts,
