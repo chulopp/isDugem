@@ -12,7 +12,6 @@ import {
 } from "@/lib/types";
 import {
   computeDistancesToCategories,
-  evaluateTelemetryLocally,
   getRealtimeTimeLabel,
   haversineDistanceM,
 } from "@/lib/mqttTopics";
@@ -55,7 +54,7 @@ export function useTelemetryStore() {
 
   const [latestAlert, setLatestAlert] = useState<Alert>({
     status: "NORMAL",
-    reason: "Menunggu data sensor masuk atau pilih skenario simulasi.",
+    reason: "Menunggu alert resmi dari backend.",
     timestamp_ms: 0,
     context: {
       time_label: "lainnya",
@@ -103,19 +102,6 @@ export function useTelemetryStore() {
       mode === "auto" ? getRealtimeTimeLabel(new Date()) : mode;
     activeTimeLabelRef.current = resolvedLabel;
     setActiveTimeLabel(resolvedLabel);
-
-    setLatestTelemetry((curr) => {
-      if (curr.sequence > 0) {
-        const evaluated = evaluateTelemetryLocally(
-          curr.location.lat,
-          curr.location.lon,
-          curr.audio.db,
-          resolvedLabel
-        );
-        setLatestAlert(evaluated);
-      }
-      return curr;
-    });
   }, []);
 
   const addEventLog = useCallback(
@@ -139,16 +125,14 @@ export function useTelemetryStore() {
   const ingestAnakTelemetry = useCallback(
     (payload: AnakTelemetry, timeOverride?: TimeLabel) => {
       const now = payload.sent_at_ms || Date.now();
-      let tLabel = activeTimeLabelRef.current;
 
       if (timeOverride) {
         timeModeRef.current = timeOverride;
         setTimeMode(timeOverride);
         activeTimeLabelRef.current = timeOverride;
         setActiveTimeLabel(timeOverride);
-        tLabel = timeOverride;
       } else if (timeModeRef.current === "auto") {
-        tLabel = getRealtimeTimeLabel(new Date());
+        const tLabel = getRealtimeTimeLabel(new Date());
         activeTimeLabelRef.current = tLabel;
         setActiveTimeLabel(tLabel);
       }
@@ -212,39 +196,6 @@ export function useTelemetryStore() {
       };
 
       setHistory((prevHist) => [...prevHist.slice(-59), newPoint]);
-
-      const evaluated = evaluateTelemetryLocally(
-        payload.location.lat,
-        payload.location.lon,
-        payload.audio.db,
-        tLabel
-      );
-
-      setLatestAlert((prevAlert) => {
-        if (
-          prevAlert.status !== evaluated.status ||
-          prevAlert.timestamp_ms === 0
-        ) {
-          const sev =
-            evaluated.status === "ANOMALY_FAKE_GPS" ||
-            evaluated.status === "CRITICAL_TERDETEKSI_DI_BAR"
-              ? "critical"
-              : evaluated.status === "ALERT_BOLOS_KULIAH" ||
-                evaluated.status === "WARNING_BELUM_KE_MASJID"
-              ? "warning"
-              : "normal";
-
-          addEventLog({
-            sender: "Server Decision Engine",
-            role: "server",
-            title: evaluated.status,
-            message: evaluated.reason,
-            severity: sev,
-            meta: `${nearestSpot.name} (${Math.round(nearestSpotDist)} m)`,
-          });
-        }
-        return evaluated;
-      });
     },
     [addEventLog]
   );

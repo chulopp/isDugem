@@ -122,9 +122,9 @@ export const MACRO_ZONES = [
   {
     id: "zone_bar_kotalama",
     name: "Zona Hiburan Kota Lama",
-    lat: -6.9665,
-    lon: 110.4298,
-    radius_m: 350,
+    lat: -6.966984,
+    lon: 110.429807,
+    radius_m: 250,
     color: "#E11D48",
   },
 ];
