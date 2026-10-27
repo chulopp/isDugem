@@ -142,6 +142,7 @@ export default function MapPanel({
           nearestDistM={nearestSpotDist}
           trailCoords={trailCoords}
           activeRouteCoords={activeRouteCoords}
+          isTripRunning={isTripRunning}
           autoFollow={autoFollow}
           cameraTarget={cameraTarget}
           onSelectSpot={(spot) => {
@@ -170,22 +171,22 @@ export default function MapPanel({
         {/* Floating Legend Kanan Bawah */}
         <div className="absolute bottom-3 right-3 z-[400] px-3 py-1.5 rounded-xl bg-white/85 backdrop-blur-md border border-white/90 shadow-sm flex items-center gap-3 text-[11px] font-semibold text-slate-700">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-blue-600" /> Kampus
+            <span className="w-2 rounded-full bg-blue-600 h-2" /> Kampus
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Masjid
+            <span className="w-2 rounded-full bg-emerald-500 h-2" /> Masjid
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-indigo-500" /> Kos
+            <span className="w-2 rounded-full bg-indigo-500 h-2" /> Kos
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-rose-600" /> Bar
+            <span className="w-2 rounded-full bg-rose-600 h-2" /> Bar
           </span>
         </div>
       </div>
 
       {/* Bar Bawah: Kontrol Simulasi Perjalanan Live & Pintasan Titik */}
-      <div className="px-5 py-3 bg-slate-50/80 border-t border-slate-200/70 flex flex-col gap-2.5">
+      <div className="px-5 py-3 bg-slate-50/80 border-t border-slate-200/70 flex flex-col gap-2.5 min-h-[92px]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
             <Navigation2 className="w-3.5 h-3.5 text-emerald-600" />

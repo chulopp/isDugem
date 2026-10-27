@@ -73,9 +73,12 @@ export function useTelemetryStore() {
   >([]);
   const [speedKmh, setSpeedKmh] = useState<number>(0);
 
-  const prevLocRef = useRef<{ lat: number; lon: number; time: number } | null>(
-    null
-  );
+  const prevLocRef = useRef<{
+    lat: number;
+    lon: number;
+    time: number;
+    sequence?: number;
+  } | null>(null);
   const timeModeRef = useRef<TimeMode>("auto");
   const activeTimeLabelRef = useRef<TimeLabel>(getRealtimeTimeLabel());
 
@@ -123,8 +126,21 @@ export function useTelemetryStore() {
   }, []);
 
   const ingestAnakTelemetry = useCallback(
-    (payload: AnakTelemetry, timeOverride?: TimeLabel) => {
+    (
+      payload: AnakTelemetry,
+      timeOverride?: TimeLabel,
+      tripContext?: { destinationName: string; distanceToDestM: number }
+    ) => {
       const now = payload.sent_at_ms || Date.now();
+
+      // Abaikan duplikat persis dari sequence yang sama (misal loopback broker MQTT)
+      if (
+        prevLocRef.current &&
+        payload.sequence > 0 &&
+        prevLocRef.current.sequence === payload.sequence
+      ) {
+        return;
+      }
 
       if (timeOverride) {
         timeModeRef.current = timeOverride;
@@ -147,7 +163,7 @@ export function useTelemetryStore() {
         );
         const dtSec = Math.max(0.5, (now - prev.time) / 1000);
         const calcSpeed =
-          distMovedM > 1.5
+          distMovedM > 1.2
             ? Math.min(95, Math.round((distMovedM / dtSec) * 3.6))
             : 0;
         setSpeedKmh(calcSpeed);
@@ -159,6 +175,7 @@ export function useTelemetryStore() {
         lat: payload.location.lat,
         lon: payload.location.lon,
         time: now,
+        sequence: payload.sequence,
       };
 
       setLatestTelemetry(payload);
@@ -187,17 +204,27 @@ export function useTelemetryStore() {
         payload.location.lon
       );
 
+      const resolvedDistance =
+        tripContext && tripContext.distanceToDestM !== undefined
+          ? Math.round(tripContext.distanceToDestM)
+          : Math.round(nearestSpotDist);
+
+      const resolvedPoi =
+        tripContext && tripContext.destinationName
+          ? tripContext.destinationName
+          : nearestSpot.name;
+
       const newPoint: TelemetryHistoryPoint = {
         time: formatClock(now),
         timestamp_ms: now,
         db: Number(payload.audio.db.toFixed(1)),
-        distance_m: Math.round(nearestSpotDist),
-        nearest_poi: nearestSpot.name,
+        distance_m: resolvedDistance,
+        nearest_poi: resolvedPoi,
       };
 
       setHistory((prevHist) => [...prevHist.slice(-59), newPoint]);
     },
-    [addEventLog]
+    []
   );
 
   const ingestOrtuTelemetry = useCallback(

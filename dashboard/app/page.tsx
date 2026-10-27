@@ -11,7 +11,7 @@ import SystemControlPanel from "@/components/SystemControlPanel";
 import QrConnectModal from "@/components/QrConnectModal";
 import { useTelemetryStore } from "@/hooks/useTelemetryStore";
 import { useMqtt } from "@/hooks/useMqtt";
-import { MQTT_TOPICS } from "@/lib/mqttTopics";
+import { MQTT_TOPICS, haversineDistanceM } from "@/lib/mqttTopics";
 import { fetchOsrmStreetRoute, getSimulatedTimestampMs } from "@/lib/mockData";
 import {
   AnakTelemetry,
@@ -43,6 +43,23 @@ function densifyCoords(
   return result;
 }
 
+function generateTripSteps(
+  coords: [number, number][],
+  targetSteps: number = 46
+): [number, number][] {
+  if (coords.length <= 2) return coords;
+  if (coords.length >= targetSteps) {
+    const result: [number, number][] = [];
+    const step = (coords.length - 1) / (targetSteps - 1);
+    for (let i = 0; i < targetSteps; i++) {
+      const idx = Math.min(coords.length - 1, Math.round(i * step));
+      result.push(coords[idx]);
+    }
+    return result;
+  }
+  return densifyCoords(coords, targetSteps);
+}
+
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<NavTab>("overview");
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -54,6 +71,7 @@ export default function DashboardPage() {
   const [clockDisplay, setClockDisplay] = useState("");
 
   const tripTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isTripRunningRef = useRef(false);
   const seqRef = useRef<number>(Math.floor(Date.now() / 1000));
 
   useEffect(() => {
@@ -102,6 +120,7 @@ export default function DashboardPage() {
 
   const { isConnected, publishRaw, publishCommand } = useMqtt({
     onAnakTelemetry: (payload) => {
+      if (isTripRunningRef.current) return;
       seqRef.current = Math.max(seqRef.current, payload.sequence || 0);
       ingestAnakTelemetry(payload);
     },
@@ -131,6 +150,7 @@ export default function DashboardPage() {
       clearInterval(tripTimerRef.current);
       tripTimerRef.current = null;
     }
+    isTripRunningRef.current = false;
     setIsTripRunning(false);
     setActiveTripId(null);
   }, []);
@@ -264,6 +284,7 @@ export default function DashboardPage() {
     async (route: LiveTripRoute) => {
       stopLiveTrip();
       setActivePresetId(null);
+      isTripRunningRef.current = true;
       setIsTripRunning(true);
       setActiveTripId(route.id);
 
@@ -278,7 +299,7 @@ export default function DashboardPage() {
         route.waypoints
       );
 
-      const steps = densifyCoords(rawStreetCoords, 36);
+      const steps = generateTripSteps(rawStreetCoords, 46);
       setActiveRouteCoords(steps);
       clearTrail(steps[0]);
 
@@ -328,10 +349,21 @@ export default function DashboardPage() {
           },
         };
 
-        ingestAnakTelemetry(payload, route.time_label);
+        const destCoord = steps[steps.length - 1];
+        const remainingDistM = haversineDistanceM(
+          lat,
+          lon,
+          destCoord[0],
+          destCoord[1]
+        );
+
+        ingestAnakTelemetry(payload, route.time_label, {
+          destinationName: route.toName,
+          distanceToDestM: remainingDistM,
+        });
         publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
         idx += 1;
-      }, 650);
+      }, 600);
     },
     [
       stopLiveTrip,

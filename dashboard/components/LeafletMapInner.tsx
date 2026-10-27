@@ -25,31 +25,42 @@ interface LeafletMapInnerProps {
   nearestDistM: number;
   trailCoords: [number, number][];
   activeRouteCoords: [number, number][];
+  isTripRunning?: boolean;
   autoFollow: boolean;
   cameraTarget: { lat: number; lon: number; zoom: number; ts: number } | null;
   onSelectSpot?: (spot: PoiSpot) => void;
 }
 
 function MapCameraController({
-  pos,
+  targetLat,
+  targetLon,
   autoFollow,
   cameraTarget,
 }: {
-  pos: [number, number];
+  targetLat: number;
+  targetLon: number;
   autoFollow: boolean;
   cameraTarget: { lat: number; lon: number; zoom: number; ts: number } | null;
 }) {
   const map = useMap();
   const lastTargetTs = useRef<number>(0);
+  const prevTargetCoordRef = useRef<[number, number]>([targetLat, targetLon]);
 
   useEffect(() => {
     const container = map.getContainer();
     if (!container || typeof ResizeObserver === "undefined") return;
+    let resizeTimer: NodeJS.Timeout | null = null;
     const observer = new ResizeObserver(() => {
-      map.invalidateSize();
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        map.invalidateSize();
+      }, 150);
     });
     observer.observe(container);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (resizeTimer) clearTimeout(resizeTimer);
+    };
   }, [map]);
 
   useEffect(() => {
@@ -63,9 +74,16 @@ function MapCameraController({
 
   useEffect(() => {
     if (autoFollow) {
-      map.panTo(pos, { animate: true, duration: 0.4 });
+      const [prevLat, prevLon] = prevTargetCoordRef.current;
+      const distDelta =
+        Math.abs(prevLat - targetLat) + Math.abs(prevLon - targetLon);
+
+      if (distDelta > 0.00003) {
+        prevTargetCoordRef.current = [targetLat, targetLon];
+        map.panTo([targetLat, targetLon], { animate: true, duration: 0.55 });
+      }
     }
-  }, [pos, autoFollow, map]);
+  }, [targetLat, targetLon, autoFollow, map]);
 
   return null;
 }
@@ -140,6 +158,7 @@ export default function LeafletMapInner({
   nearestDistM,
   trailCoords,
   activeRouteCoords,
+  isTripRunning = false,
   autoFollow,
   cameraTarget,
   onSelectSpot,
@@ -168,7 +187,7 @@ export default function LeafletMapInner({
     const angleDeg = Math.round((angleRad * 180) / Math.PI);
     setBearing(angleDeg);
 
-    const durationMs = 550;
+    const durationMs = 520;
     const startTime = performance.now();
 
     if (animFrameRef.current) {
@@ -206,7 +225,7 @@ export default function LeafletMapInner({
     <MapContainer
       center={[-7.053, 110.438]}
       zoom={15}
-      scrollWheelZoom={true}
+      scrollWheelZoom={false}
       zoomControl={false}
       className="w-full h-full z-0"
     >
@@ -216,7 +235,8 @@ export default function LeafletMapInner({
       />
 
       <MapCameraController
-        pos={renderedPos}
+        targetLat={targetLat}
+        targetLon={targetLon}
         autoFollow={autoFollow}
         cameraTarget={cameraTarget}
       />
@@ -299,16 +319,18 @@ export default function LeafletMapInner({
         />
       )}
 
-      {/* Garis Jarak ke POI Terdekat */}
-      <Polyline
-        positions={[renderedPos, [nearestSpot.lat, nearestSpot.lon]]}
-        pathOptions={{
-          color: nearestSpot.color,
-          weight: 2,
-          dashArray: "5 5",
-          opacity: 0.75,
-        }}
-      />
+      {/* Garis Jarak ke POI Terdekat: Hanya tampil saat BUKAN dalam mode perjalanan aktif */}
+      {!isTripRunning && (
+        <Polyline
+          positions={[renderedPos, [nearestSpot.lat, nearestSpot.lon]]}
+          pathOptions={{
+            color: nearestSpot.color,
+            weight: 2,
+            dashArray: "5 5",
+            opacity: 0.75,
+          }}
+        />
+      )}
 
       {/* Lingkaran Akurasi GPS Anak */}
       <Circle

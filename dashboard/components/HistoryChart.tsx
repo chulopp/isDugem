@@ -39,15 +39,15 @@ function CustomDarkTooltip({ active, payload, label }: CustomTooltipProps) {
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-4">
           <span className="flex items-center gap-1.5 text-slate-300">
-            <span className="w-1 h-3 rounded-full bg-sky-400" />
+            <span className="w-1.5 h-3 rounded-full bg-sky-400" />
             Suara
           </span>
           <span className="font-bold text-white">{point?.db} dB</span>
         </div>
         <div className="flex items-center justify-between gap-4">
           <span className="flex items-center gap-1.5 text-slate-300">
-            <span className="w-1 h-3 rounded-full bg-amber-400" />
-            Jarak POI
+            <span className="w-1.5 h-3 rounded-full bg-amber-400" />
+            Jarak
           </span>
           <span className="font-bold text-white">{point?.distance_m} m</span>
         </div>
@@ -65,7 +65,7 @@ export default function HistoryChart({ data }: HistoryChartProps) {
             Grafik Suara & Jarak
           </h3>
           <p className="text-xs text-slate-400">
-            Riwayat tingkat suara (dB) dan jarak ke titik terdekat (m)
+            Riwayat tingkat suara (dB) dan jarak rute/titik terdekat (m)
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs font-medium text-slate-600">
@@ -92,15 +92,15 @@ export default function HistoryChart({ data }: HistoryChartProps) {
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data}
-              margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
+              margin={{ top: 8, right: 12, left: -16, bottom: 0 }}
             >
               <defs>
                 <linearGradient id="colorDb" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#0EA5E9" stopOpacity={0.22} />
+                  <stop offset="5%" stopColor="#0EA5E9" stopOpacity={0.25} />
                   <stop offset="95%" stopColor="#0EA5E9" stopOpacity={0.0} />
                 </linearGradient>
                 <linearGradient id="colorDist" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.18} />
+                  <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.2} />
                   <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.0} />
                 </linearGradient>
               </defs>
@@ -116,12 +116,25 @@ export default function HistoryChart({ data }: HistoryChartProps) {
                 tick={{ fill: "#94A3B8", fontSize: 11 }}
               />
               <YAxis
+                yAxisId="db"
+                domain={[0, 100]}
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "#94A3B8", fontSize: 11 }}
+                tick={{ fill: "#0EA5E9", fontSize: 10 }}
+                width={30}
+              />
+              <YAxis
+                yAxisId="dist"
+                orientation="right"
+                domain={[0, "auto"]}
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "#F59E0B", fontSize: 10 }}
+                width={38}
               />
               <Tooltip content={<CustomDarkTooltip />} />
               <Area
+                yAxisId="db"
                 type="monotone"
                 dataKey="db"
                 name="Suara"
@@ -132,6 +145,7 @@ export default function HistoryChart({ data }: HistoryChartProps) {
                 isAnimationActive={false}
               />
               <Area
+                yAxisId="dist"
                 type="monotone"
                 dataKey="distance_m"
                 name="Jarak"
