@@ -2,11 +2,16 @@ from __future__ import annotations
 import json
 import logging
 import ssl
-import certifi
 import uuid
 from typing import Any, Callable, Dict, Optional, Sequence
 import paho.mqtt.client as mqtt
 from config import Config
+
+try:
+    import certifi
+    _DEFAULT_CAFILE: Optional[str] = certifi.where()
+except ImportError:
+    _DEFAULT_CAFILE = None
 
 logger = logging.getLogger("rantauguard.mqtt")
 MessageHandler = Callable[[str, bytes], None]
@@ -27,7 +32,7 @@ class MqttClient:
         )
 
         if cfg.mqtt_use_tls:
-            context = ssl.create_default_context(cafile=certifi.where())
+            context = ssl.create_default_context(cafile=_DEFAULT_CAFILE)
             context.minimum_version = ssl.TLSVersion.TLSv1_2
             self._client.tls_set_context(context)
         if cfg.mqtt_username:

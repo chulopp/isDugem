@@ -15,8 +15,6 @@ import { useMqtt } from "@/hooks/useMqtt";
 import {
   MQTT_TOPICS,
   STATUS_DISPLAY,
-  evaluateTelemetryLocally,
-  getRealtimeTimeLabel,
 } from "@/lib/mqttTopics";
 import { Alert, AnakTelemetry, OrtuTelemetry } from "@/lib/types";
 
@@ -26,9 +24,9 @@ export default function OrtuEdgePage() {
   const [isShaking, setIsShaking] = useState(false);
   const [lastActionNote, setLastActionNote] = useState<string | null>(null);
 
-  const [childAlert, setChildAlert] = useState<Alert>(() =>
-    evaluateTelemetryLocally(-7.0502, 110.4398, 52.4, "jam_kuliah")
-  );
+  const [childAlert, setChildAlert] = useState<Alert | null>(null);
+  const [latestAnakTelemetry, setLatestAnakTelemetry] =
+    useState<AnakTelemetry | null>(null);
 
   const seqRef = useRef(0);
   const lastShakeMsRef = useRef(0);
@@ -42,13 +40,7 @@ export default function OrtuEdgePage() {
       setChildAlert(payload);
     },
     onAnakTelemetry: (payload: AnakTelemetry) => {
-      const evaluated = evaluateTelemetryLocally(
-        payload.location.lat,
-        payload.location.lon,
-        payload.audio.db,
-        getRealtimeTimeLabel(new Date())
-      );
-      setChildAlert(evaluated);
+      setLatestAnakTelemetry(payload);
     },
   });
 
@@ -151,8 +143,10 @@ export default function OrtuEdgePage() {
     return () => stopOrtuSensor();
   }, [stopOrtuSensor]);
 
-  const statusInfo =
-    STATUS_DISPLAY[childAlert.status] || STATUS_DISPLAY.NORMAL;
+  const isBackendActive = isConnected && childAlert !== null;
+  const statusInfo = childAlert
+    ? STATUS_DISPLAY[childAlert.status] || STATUS_DISPLAY.NORMAL
+    : null;
 
   return (
     <div className="min-h-screen bg-[#ECEFF4] p-4 flex items-center justify-center">
@@ -172,42 +166,72 @@ export default function OrtuEdgePage() {
 
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
-              isConnected
+              !isConnected
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : isBackendActive
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                : "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-sky-50 text-sky-700 border-sky-200"
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                !isConnected
+                  ? "bg-amber-500"
+                  : isBackendActive
+                  ? "bg-emerald-500 animate-pulse"
+                  : "bg-sky-500"
               }`}
             />
-            {isConnected ? "Terhubung" : "Menunggu"}
+            {!isConnected
+              ? "Menghubungkan"
+              : isBackendActive
+              ? "Backend Aktif"
+              : "Broker Terhubung (Menunggu Backend)"}
           </span>
         </div>
 
         {/* 2. Kartu Status Anak Terkini */}
         <div
-          className={`p-5 rounded-3xl border ${statusInfo.badgeBg} ${statusInfo.borderColor} space-y-2`}
+          className={`p-5 rounded-3xl border space-y-2 ${
+            statusInfo
+              ? `${statusInfo.badgeBg} ${statusInfo.borderColor}`
+              : "bg-slate-50/90 border-slate-200/80"
+          }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase">
               Status Anak
             </span>
-            <span
-              className={`inline-flex items-center gap-1.5 text-xs font-bold ${statusInfo.badgeText}`}
-            >
-              {statusInfo.severity === "critical" ? (
-                <ShieldAlert className="w-4 h-4" />
-              ) : (
-                <ShieldCheck className="w-4 h-4" />
-              )}
-              <span>{statusInfo.label}</span>
-            </span>
+            {statusInfo ? (
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-bold ${statusInfo.badgeText}`}
+              >
+                {statusInfo.severity === "critical" ? (
+                  <ShieldAlert className="w-4 h-4" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4" />
+                )}
+                <span>{statusInfo.label}</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                <span>MENUNGGU BACKEND</span>
+              </span>
+            )}
           </div>
           <p className="text-xs font-medium text-slate-800">
-            {childAlert.reason}
+            {childAlert
+              ? childAlert.reason
+              : latestAnakTelemetry
+              ? `Telemetry anak diterima (sensor #${latestAnakTelemetry.sequence}, ${latestAnakTelemetry.audio.db.toFixed(1)} dB). Menunggu evaluasi resmi dari server backend.`
+              : "Menunggu alert resmi dari backend..."}
           </p>
+          {latestAnakTelemetry && childAlert && (
+            <p className="text-[11px] text-slate-500 font-mono mt-1 pt-1.5 border-t border-slate-200/60">
+              Live Sensor: {latestAnakTelemetry.audio.db.toFixed(1)} dB · Paket #{latestAnakTelemetry.sequence}
+            </p>
+          )}
         </div>
 
         {/* 3. Kartu Sensor Gerak Shake-to-Ping */}
