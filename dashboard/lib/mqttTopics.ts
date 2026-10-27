@@ -70,11 +70,11 @@ export const POI_SPOTS: PoiSpot[] = [
   },
   {
     id: "bar_redhare",
-    name: "RedHare Semarang",
+    name: "RedHare Kota Lama",
     category: "bar",
     area: "Semarang Bawah",
-    lat: -6.976429,
-    lon: 110.41295,
+    lat: -6.968,
+    lon: 110.4285,
     radius_m: 100,
     color: "#E11D48",
   },
@@ -122,9 +122,9 @@ export const MACRO_ZONES = [
   {
     id: "zone_bar_kotalama",
     name: "Zona Hiburan Kota Lama",
-    lat: -6.9665,
-    lon: 110.4298,
-    radius_m: 350,
+    lat: -6.966984,
+    lon: 110.429807,
+    radius_m: 250,
     color: "#E11D48",
   },
 ];

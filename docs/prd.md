@@ -2,7 +2,7 @@
 ### Smart Student & Parental Guardian System
 **Mata Kuliah:** Internet of Things - Tugas Praktek Multicommunication 2 Arah & Multisensor
 **Tim:** 3 orang · **Deadline:** 1 minggu dari briefing tugas
-**Versi dokumen:** v2.1 - All-in-One Vercel HTTPS Cloud Deployment (Next.js App Router)
+**Versi dokumen:** v2.1 — All-in-One Vercel HTTPS Cloud Deployment (Next.js App Router) & Detail Teknis Eksekusi
 
 ---
 
@@ -45,10 +45,10 @@ Mahasiswa rantau sering sulit dipantau orang tua: GPS saja bisa dimanipulasi (*f
 | Cloud Hosting Web | **Vercel** (Single All-in-One Deployment) | Menyediakan domain HTTPS gratis otomatis, akses via QR code, mencegah pemblokiran sensor di Android & iOS |
 | Peta | `react-leaflet` + CartoDB Dark Matter tile | Dark mode map, ringan, gratis |
 | Grafik histori | `recharts` | Native React, gampang di-style dark mode |
-| MQTT di browser | `mqtt` (npm package, MQTT over WebSocket/WSS port 8884) | Standar untuk komunikasi real-time dari browser HP dan laptop |
-| Broker | HiveMQ publik - `broker.hivemq.com` (8883 TLS untuk server, 8884 WSS untuk web browser) | Gratis, tanpa akun, dipakai di contoh dosen |
+| MQTT di browser | `mqtt` (npm package, MQTT over WebSocket/WSS port 8884) | Standar untuk komunikasi real-time dari browser HP dan dashboard laptop |
+| Broker | HiveMQ publik — `broker.hivemq.com` (8883 TLS untuk server backend, 8884 WSS untuk web browser dashboard & edge) | Gratis, tanpa akun, dipakai di contoh dosen |
 
-> Catatan Arsitektur Vercel: Dashboard (`/`), HP Anak (`/anak`), dan HP Ortu (`/ortu`) disatukan dalam satu proyek Next.js yang di-deploy ke Vercel. Dengan demikian, tim hanya memiliki 1 domain HTTPS resmi (misal: `https://isdugem.vercel.app`). HP anak dan HP ortu cukup memindai QR Code untuk membuka antarmuka masing-masing dengan izin mikrofon & GPS yang langsung aktif tanpa hambatan keamanan browser HTTP.
+> Catatan Arsitektur: Dashboard (`/`), HP Anak (`/anak`), dan HP Ortu (`/ortu`) disatukan dalam satu proyek Next.js App Router (dapat di-deploy ke Vercel atau dijalankan secara lokal). HP anak dan HP ortu cukup mengakses rute masing-masing via domain HTTPS untuk izin mikrofon & GPS tanpa hambatan browser HTTP. Implementasi file HTML/JS statis tetap disediakan di `edge/` sebagai fallback mandiri.
 
 ## 5. Struktur Repo (Monorepo)
 
@@ -397,11 +397,11 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 
 ## 10. Pembagian Tugas (3 Orang)
 
-### 👤 Anggota 1 - Edge Device Lead
+### 👤 Anggota 1 — Edge Device Lead
 - Folder: `dashboard/app/anak/`, `dashboard/app/ortu/` (dan fallback `edge/`). Branch prefix: `edge/`.
 - Implementasi Geolocation API, Web Audio API (RMS→dB di sisi client untuk validasi), DeviceMotion untuk shake detection.
 - Publish/subscribe MQTT sesuai kontrak Bagian 7.2/7.3/7.5.
-- UI mobile modern responsif di HP: status koneksi, gauge sensor, notifikasi alert masuk, tombol manual darurat.
+- UI minimal di HP: status koneksi, notifikasi alert masuk, tombol manual darurat.
 
 ### 👤 Anggota 2 - Backend Processing & Algoritma Lead
 - Folder: `server/`. Branch prefix: `server/`.
@@ -409,7 +409,7 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 - Unit test untuk tiap fungsi processing (`server/tests/`).
 - Jaga konsistensi skema payload - review PR dari edge & dashboard untuk hal ini.
 
-### 👤 Anggota 3 - **Dashboard Lead (fokus "gokil", Next.js)**
+### 👤 Anggota 3 — **Dashboard Lead (fokus "gokil", Next.js)**
 - Folder: `dashboard/app/page.tsx` & `dashboard/components/`. Branch prefix: `dashboard/`.
 - Setup project Next.js + Tailwind + react-leaflet + recharts + mqtt (Hosting Vercel).
 - Bangun semua komponen di Bagian 8.7, styling dark theme, animasi smooth.
@@ -421,10 +421,10 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 
 | Hari | Target |
 |---|---|
-| 1 | Setup repo + branching, isi `docs/mqtt-schema.md`, setup broker & `.env.example`, inisialisasi Next.js project + deploy Vercel |
-| 2-3 | Edge publish telemetry dummy → Server subscribe & proses (Haversine, dB) jalan dengan mock |
-| 3-4 | Decision engine lengkap + unit test lulus; Dashboard komponen utama (Map, StatusCard) render dengan mock data |
-| 4-5 | Integrasi nyata: Edge asli via HP Vercel → Server → Dashboard (ganti mock jadi data live) |
+| 1 | Setup repo + branching, isi `docs/mqtt-schema.md`, setup broker & `.env.example`, inisialisasi Next.js project + opsi deploy Vercel |
+| 2–3 | Edge publish telemetry dummy → Server subscribe & proses (Haversine, dB) jalan dengan mock |
+| 3–4 | Decision engine lengkap + unit test lulus; Dashboard komponen utama (Map, StatusCard) render dengan mock data |
+| 4–5 | Integrasi nyata: Edge asli via web HP / Vercel → Server → Dashboard (ganti mock jadi data live) |
 | 6 | DemoPresetPanel, Command Center, testing semua skenario di Bagian 12, merge `develop` → `main` |
 | 7 | Rekam video demo, susun PPT, finalisasi README |
 
@@ -437,7 +437,7 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 - [ ] Shake-to-ping dari HP ortu memicu respons di HP anak
 - [ ] Dashboard Next.js menampilkan peta, visualizer, status live tanpa delay signifikan
 - [ ] DemoPresetPanel bisa mensimulasikan seluruh skenario tanpa jalan kaki fisik
-- [ ] Semua perangkat terhubung via internet HTTPS Vercel & broker publik HiveMQ (bebas dari provider manapun, tidak terikat 1 WiFi lokal)
+- [ ] Semua perangkat terhubung via broker publik HiveMQ (baik melalui domain HTTPS Vercel maupun jaringan lokal saat demo)
 - [ ] `develop` sudah di-merge ke `main`, tidak ada konflik tersisa
 
 ## 13. Risiko & Mitigasi
@@ -447,8 +447,8 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 | Tidak bisa jalan ke lokasi asli saat demo di kelas | DemoPresetPanel (simulasi jam + koordinat via MQTT publish langsung) |
 | Mikrofon HP beda sensitivitas antar perangkat | Kalibrasi threshold dB saat testing H-4/H-5 |
 | Broker publik down/delay saat presentasi | Siapkan broker cadangan (EMQX) di `.env`, tes H-5 |
-| Konflik merge antar branch (skema payload beda) | Kontrak Bagian 7 adalah sumber kebenaran tunggal - review PR wajib cek ini |
-| iPhone/Android browser restriksi Web Audio/Geolocation | **Mitigasi Selesai:** Hosting Vercel menyediakan domain HTTPS resmi otomatis, izin sensor langsung disetujui browser smartphone tanpa diblokir |
+| Konflik merge antar branch (skema payload beda) | Kontrak Bagian 7 adalah sumber kebenaran tunggal — review PR wajib cek ini |
+| iPhone/Android browser restriksi Web Audio/Geolocation | Buka via HTTPS resmi (deployment Vercel atau tunnel HTTPS) agar peramban smartphone mengizinkan akses sensor; fallback menggunakan DemoPresetPanel langsung di peramban laptop |
 
 ## 14. Deliverables
 

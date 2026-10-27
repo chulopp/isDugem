@@ -41,12 +41,20 @@ class rangeTime:
         return t >= self.start or t < self.end
     
 def parseTime(text: str) -> time:
+    value = text.strip()
+
+    if not re.fullmatch(r"\d{2}:\d{2}", value):
+        raise ConfigError(
+            f"Format jam harus HH:MM, dapat: {text!r}"
+        )
+
     try:
-        hh, mm = text.strip().split(":")
-        hour, minute = int(hh), int(mm)
-        return time(hour, minute)
+        hh, mm = value.split(":")
+        return time(int(hh), int(mm))
     except (ValueError, TypeError) as exc:
-        raise ConfigError(f"Format jam harus HH:MM, dapat: {text!r}") from exc
+        raise ConfigError(
+            f"Jam atau menit di luar rentang yang valid: {text!r}"
+        ) from exc
 
 def parseWindow(text: str) -> rangeTime:
     parts = text.strip().split("-")
@@ -55,8 +63,17 @@ def parseWindow(text: str) -> rangeTime:
     return rangeTime(parseTime(parts[0]), parseTime(parts[1]))
 
 def parseWindows(text: str) -> Tuple[rangeTime, ...]:
-    items = [p for p in (text or "").split(",") if p.strip()]
-    return tuple(parseWindow(p) for p in items)
+    if not text or not text.strip():
+        return ()
+
+    items = text.split(",")
+
+    if any(not item.strip() for item in items):
+        raise ConfigError(
+            f"Daftar rentang waktu mengandung elemen kosong: {text!r}"
+        )
+
+    return tuple(parseWindow(item) for item in items)
 
 def parsePOI(name: str, text: str) -> POI:
     lat_env = os.getenv(f"{name.upper()}_LAT")
@@ -134,6 +151,7 @@ class Config:
     alert_heartbeat_s: float
     ping_republish: bool
     log_level: str
+    telemetry_stale_after_s: float
 
     @property
     def topic_prefix(self) -> str:
@@ -195,19 +213,46 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         name: parsePOI(name, _env_str(f"POI_{name.upper()}", DEFAULT_POI[name]))
         for name in POI_NAMES
     }
+    raw_mqtt_host = os.getenv("MQTT_HOST")
+
+    if raw_mqtt_host is not None and not raw_mqtt_host.strip():
+        raise ConfigError("MQTT_HOST tidak boleh kosong")
+
+    mqtt_host = _env_str("MQTT_HOST", "broker.hivemq.com")
+
+
+    mqtt_port = _env_int("MQTT_PORT", 8883)
+    if not 1 <= mqtt_port <= 65535:
+        raise ConfigError(
+            f"MQTT_PORT harus berada pada rentang 1–65535, dapat: {mqtt_port}"
+        )
+
+    mqtt_keepalive = _env_int("MQTT_KEEPALIVE", 60)
+    if mqtt_keepalive <= 0:
+        raise ConfigError(
+            f"MQTT_KEEPALIVE harus lebih besar dari 0, dapat: {mqtt_keepalive}"
+        )
 
     heartbeat = _env_float("ALERT_HEARTBEAT_S", 0.0)
-    if heartbeat < 0:
-        raise ConfigError("ALERT_HEARTBEAT_S tidak boleh negatif")
+    if not math.isfinite(heartbeat) or heartbeat < 0:
+        raise ConfigError(
+            "ALERT_HEARTBEAT_S harus berupa angka finite dan tidak negatif"
+        )
+
+    stale_after = _env_float("TELEMETRY_STALE_AFTER_S", 60.0)
+    if not math.isfinite(stale_after) or stale_after <= 0:
+        raise ConfigError(
+            "TELEMETRY_STALE_AFTER_S harus berupa angka finite dan lebih besar dari 0"
+        )
 
     return Config(
         project_id=project_id,
-        mqtt_host=_env_str("MQTT_HOST", "broker.hivemq.com"),
-        mqtt_port=_env_int("MQTT_PORT", 8883),
+        mqtt_host=mqtt_host,
+        mqtt_port=mqtt_port,
         mqtt_use_tls=_env_bool("MQTT_USE_TLS", True),
         mqtt_username=os.getenv("MQTT_USERNAME") or None,
         mqtt_password=os.getenv("MQTT_PASSWORD") or None,
-        mqtt_keepalive=_env_int("MQTT_KEEPALIVE", 60),
+        mqtt_keepalive=mqtt_keepalive,
         mqtt_qos=qos,
         timezone=tz_name,
         use_server_clock=_env_bool("USE_SERVER_CLOCK", False),
@@ -218,4 +263,5 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         alert_heartbeat_s=heartbeat,
         ping_republish=_env_bool("PING_REPUBLISH", True),
         log_level=_env_str("LOG_LEVEL", "INFO").upper(),
+        telemetry_stale_after_s=stale_after,
     )

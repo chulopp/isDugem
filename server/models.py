@@ -38,8 +38,21 @@ def _number(value: Any, name: str) -> float:
     return result
 
 def _sequence(data: Mapping[str, Any]) -> int:
-    raw = data.get("sequence", 0)
-    return int(raw) if _is_number(raw) else 0
+    if "sequence" not in data:
+        raise PayloadError("sequence wajib ada")
+
+    raw = data["sequence"]
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise PayloadError(
+            f"sequence harus berupa integer, dapat: {raw!r}"
+        )
+
+    if raw < 0:
+        raise PayloadError(
+            f"sequence tidak boleh negatif, dapat: {raw}"
+        )
+
+    return raw
 
 def _mapping(value: Any, name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
@@ -62,10 +75,22 @@ def _optional_number(container: Mapping[str, Any], key: str, name: str, default:
     return _number(container[key], name)
 
 def _sent_at_ms(data: Mapping[str, Any]) -> Optional[int]:
-    raw = data.get("sent_at_ms")
-    if _is_number(raw) and math.isfinite(float(raw)) and float(raw) > 0:
-        return int(raw)
-    return None
+    if "sent_at_ms" not in data:
+        raise PayloadError("sent_at_ms wajib ada")
+
+    raw = data["sent_at_ms"]
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise PayloadError(
+            f"sent_at_ms harus berupa integer, dapat: {raw!r}"
+        )
+
+    if raw <= 0:
+        raise PayloadError(
+            f"sent_at_ms harus lebih besar dari 0, dapat: {raw}"
+        )
+
+    return raw
+
 
 def _check_device(data: Mapping[str, Any], expected: str) -> None:
     device_id = data.get("device_id")
@@ -75,7 +100,7 @@ def _check_device(data: Mapping[str, Any], expected: str) -> None:
 @dataclass
 class AnakTelemetry:
     sequence: int
-    sent_at_ms: Optional[int]
+    sent_at_ms: int
     lat: float
     lon: float
     accuracy_m: float
@@ -121,7 +146,7 @@ class AnakTelemetry:
 @dataclass
 class OrtuTelemetry:
     sequence: int
-    sent_at_ms: Optional[int]
+    sent_at_ms: int
     lat: float
     lon: float
     accel_magnitude: float

@@ -4,6 +4,7 @@ import json
 import logging
 import signal
 import time
+from threading import RLock
 from dataclasses import replace
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -41,10 +42,16 @@ class GuardianServer:
 
         self.latest_anak: Optional[AnakTelemetry] = None
         self.latest_ortu: Optional[OrtuTelemetry] = None
+        self._last_anak_received_s: Optional[float] = None
         self.current_status: Optional[str] = None
         self.last_alert: Optional[Alert] = None
         self._last_publish_s: float = 0.0
         self._last_anak_key: Optional[Tuple[int, int]] = None
+        self._pending_alerts: dict[int, tuple[Alert, float]] = {}
+        self._pending_publish_order: dict[int, int] = {}
+        self._publish_order = 0
+        self._last_committed_publish_order = 0
+        self._publish_lock = RLock()
 
     def handle_message(self, topic: str, raw: bytes) -> None:
         try:
@@ -64,28 +71,80 @@ class GuardianServer:
                 logger.debug("Topik diabaikan: %s", topic)
         except PayloadError as exc:
             logger.warning("Payload melanggar kontrak (%s): %s", topic, exc)
+        except Exception:
+            logger.exception(
+                "Kesalahan tak terduga saat memproses pesan dari topik %s",
+                topic,
+            )
 
     def _handle_anak(self, data: Any) -> None:
         tel = AnakTelemetry.from_payload(data)
 
         if tel.sent_at_ms is not None:
             key = (tel.sequence, tel.sent_at_ms)
-            if key == self._last_anak_key:
-                logger.debug("Duplikat telemetri anak dibuang: %s", key)
-                return
+            last_key = self._last_anak_key
+
+            if last_key is not None:
+                last_sequence, last_sent_at_ms = last_key
+
+                if tel.sequence < last_sequence:
+                    logger.warning(
+                        "Telemetry anak out-of-order dibuang: "
+                        "sequence=%d, sequence terakhir=%d",
+                        tel.sequence,
+                        last_sequence,
+                    )
+                    return
+
+                if key == last_key:
+                    logger.debug("Duplikat telemetri anak dibuang: %s", key)
+                    return
+
             self._last_anak_key = key
 
-        self.latest_anak = tel
         now_s = self._clock()
+        self.latest_anak = tel
+        self._last_anak_received_s = now_s
         alert = self.evaluate(tel, now_s)
 
-        changed = alert.status != self.current_status
-        heartbeat = self.cfg.alert_heartbeat_s
-        heartbeat_due = heartbeat > 0 and (now_s - self._last_publish_s) >= heartbeat
+        logger.info(
+            "Telemetri anak diproses: seq=%d, status=%s, near=%s (%.1fm), db=%.1f",
+            tel.sequence,
+            alert.status,
+            alert.context.nearest_poi,
+            alert.context.distance_m,
+            alert.context.db,
+        )
 
-        if changed:
-            logger.info("Status %s -> %s | %s", self.current_status, alert.status, alert.reason)
-        if changed or heartbeat_due:
+        # Bandingkan dengan status terakhir yang masih pending,
+        # bukan hanya status yang sudah dikonfirmasi broker.
+        latest_pending = (
+            next(reversed(self._pending_alerts.values()))
+            if self._pending_alerts
+            else None
+        )
+
+        reference_status = (
+            latest_pending[0].status
+            if latest_pending is not None
+            else self.current_status
+        )
+
+        changed = alert.status != reference_status
+
+        heartbeat = self.cfg.alert_heartbeat_s
+        heartbeat_due = heartbeat > 0 and (
+            now_s - self._last_publish_s
+        ) >= heartbeat
+
+        # Jangan mengantrekan alert identik jika status tersebut
+        # sudah menunggu konfirmasi publish.
+        same_status_pending = (
+            latest_pending is not None
+            and latest_pending[0].status == alert.status
+        )
+
+        if changed or (heartbeat_due and not same_status_pending):
             self._publish_alert(alert, now_s)
 
     def _handle_ortu(self, data: Any) -> None:
@@ -93,6 +152,14 @@ class GuardianServer:
         self.latest_ortu = tel
         if tel.shake_detected:
             logger.info("HP ortu terdeteksi digoyang (shake) seq=%d", tel.sequence)
+
+    @property
+    def anak_telemetry_stale(self) -> bool:
+        if self._last_anak_received_s is None:
+            return True
+
+        age_s = self._clock() - self._last_anak_received_s
+        return age_s > self.cfg.telemetry_stale_after_s
 
     def _handle_ping(self, data: Any) -> None:
         who = data.get("triggered_by", "?") if isinstance(data, dict) else "?"
@@ -151,10 +218,82 @@ class GuardianServer:
         return max(DB_MIN, min(DB_MAX, float(tel.db)))  # type: ignore[arg-type]
 
     def _publish_alert(self, alert: Alert, now_s: float) -> None:
-        self._publish(self.cfg.topic_alerts, alert.to_payload())
+        with self._publish_lock:
+            logger.info(
+                "Mempublikasikan alert ke %s: status=%s (%s)",
+                self.cfg.topic_alerts,
+                alert.status,
+                alert.reason,
+            )
+            try:
+                result = self._publish(
+                    self.cfg.topic_alerts,
+                    alert.to_payload(),
+                )
+            except Exception:
+                logger.exception("Gagal mengantrekan publish alert")
+                return
+
+            if result is False:
+                logger.error(
+                    "Alert gagal dimasukkan ke antrean publish: status=%s",
+                    alert.status,
+                )
+                return
+
+            self._publish_order += 1
+            order = self._publish_order
+
+            if type(result) is int:
+                # Simpan urutan publish bersama MID agar konfirmasi yang
+                # datang terlambat tidak mengembalikan status ke alert lama.
+                self._pending_alerts[result] = (alert, now_s)
+                self._pending_publish_order[result] = order
+                return
+
+            # Kompatibilitas dengan publisher sinkron/tiruan
+            # yang mengembalikan None.
+            self._commit_published_alert(alert, now_s, order)
+
+    def handle_publish_confirm(self, mid: int, success: bool) -> None:
+        with self._publish_lock:
+            pending = self._pending_alerts.pop(mid, None)
+            order = self._pending_publish_order.pop(mid, None)
+
+            if pending is None or order is None:
+                logger.debug(
+                    "Konfirmasi publish tanpa alert pending diabaikan: mid=%s",
+                    mid,
+                )
+                return
+
+            if not success:
+                logger.error("Publish alert gagal dikonfirmasi: mid=%s", mid)
+                return
+
+            alert, now_s = pending
+            self._commit_published_alert(alert, now_s, order)
+
+    def _commit_published_alert(
+        self,
+        alert: Alert,
+        now_s: float,
+        order: int,
+    ) -> None:
+        # Jangan biarkan konfirmasi lama menimpa alert lebih baru
+        # yang sudah berhasil dikonfirmasi.
+        if order < self._last_committed_publish_order:
+            logger.debug(
+                "Konfirmasi alert lama diabaikan: order=%s, terakhir=%s",
+                order,
+                self._last_committed_publish_order,
+            )
+            return
+
         self.current_status = alert.status
         self.last_alert = alert
         self._last_publish_s = now_s
+        self._last_committed_publish_order = order
 
 def main() -> None:
     cfg = load_config()
@@ -166,6 +305,7 @@ def main() -> None:
 
     client = MqttClient(cfg, cfg.subscribe_topics)
     server = GuardianServer(cfg, publish=client.publish_json)
+    client.on_publish_confirm = server.handle_publish_confirm
     client.on_message = server.handle_message
 
     def _shutdown(signum, frame) -> None:  # noqa: ANN001

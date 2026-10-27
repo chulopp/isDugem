@@ -39,6 +39,7 @@ export function useMqtt(handlers: UseMqttHandlers) {
 
     client.on("connect", () => {
       setIsConnected(true);
+      console.log("[MQTT] Connected ke broker WSS:", MQTT_WSS_URL);
       client.subscribe(
         [
           MQTT_TOPICS.ANAK_TELEMETRY,
@@ -46,16 +47,25 @@ export function useMqtt(handlers: UseMqttHandlers) {
           MQTT_TOPICS.ALERTS,
           MQTT_TOPICS.ALL_COMMANDS,
         ],
-        { qos: 1 }
+        { qos: 1 },
+        (err) => {
+          if (err) {
+            console.error("[MQTT] Subscribe error:", err);
+          } else {
+            console.log("[MQTT] Berhasil subscribe ke semua topik utama.");
+          }
+        }
       );
     });
 
     client.on("close", () => {
       setIsConnected(false);
+      console.log("[MQTT] Koneksi WSS ditutup");
     });
 
-    client.on("error", () => {
+    client.on("error", (err) => {
       setIsConnected(false);
+      console.error("[MQTT] Error koneksi WSS:", err);
     });
 
     client.on("message", (topic, buf) => {
@@ -83,9 +93,23 @@ export function useMqtt(handlers: UseMqttHandlers) {
 
   const publishRaw = useCallback((topic: string, payload: unknown) => {
     if (clientRef.current && clientRef.current.connected) {
-      clientRef.current.publish(topic, JSON.stringify(payload), { qos: 1 });
+      clientRef.current.publish(
+        topic,
+        JSON.stringify(payload),
+        { qos: 1 },
+        (err) => {
+          if (err) {
+            console.error(`[MQTT] Gagal publish ke ${topic}:`, err);
+          } else {
+            console.log(`[MQTT] Berhasil publish ke ${topic}`);
+          }
+        }
+      );
       return true;
     }
+    console.warn(
+      `[MQTT] Publish diabaikan karena belum terkoneksi ke broker: ${topic}`
+    );
     return false;
   }, []);
 

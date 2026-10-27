@@ -180,7 +180,6 @@ def test_fallback_ke_field_db_jika_rms_tidak_ada(server):
     push(srv, cfg, payload)
     assert sent[-1][1]["status"] == Status.ANOMALY_FAKE_GPS
 
-
 def test_heartbeat_publish_ulang(env, monkeypatch):
     monkeypatch.setenv("ALERT_HEARTBEAT_S", "30")
     cfg = load_config(env)
@@ -213,3 +212,277 @@ def test_validasi_model_telemetri():
         AnakTelemetry.from_payload({"device_id": "ortu", "location": {"lat": 1, "lon": 1}, "audio": {"rms": 1}})
     with pytest.raises(PayloadError):
         OrtuTelemetry.from_payload({"location": {"lat": 1, "lon": 1}, "motion": {"shake_detected": "ya"}})
+
+
+
+def test_sequence_lama_tidak_mengganti_latest_anak(server):
+    srv = server[0]
+
+    srv.handle_message(
+        srv.cfg.topic_anak_telemetry,
+        json.dumps(anak_payload(seq=7, lat=-6.2000, lon=106.8166)).encode("utf-8"),
+    )
+    latest = srv.latest_anak
+
+    srv.handle_message(
+        srv.cfg.topic_anak_telemetry,
+        json.dumps(anak_payload(seq=6, lat=-6.2000, lon=106.8166)).encode("utf-8"),
+    )
+
+    assert srv.latest_anak is latest
+    assert srv.latest_anak.sequence == 7
+
+
+def test_anak_telemetry_stale_setelah_batas_waktu(server):
+    srv, _, cfg = server
+    now = [1_790_000_000.0]
+    srv._clock = lambda: now[0]
+
+    assert srv.anak_telemetry_stale is True
+
+    srv._last_anak_received_s = now[0]
+    assert srv.anak_telemetry_stale is False
+
+    now[0] += cfg.telemetry_stale_after_s + 1
+    assert srv.anak_telemetry_stale is True
+
+
+def test_publish_alert_menunggu_konfirmasi_sukses(server):
+    srv, _, cfg = server
+    srv._publish = lambda topic, payload: 501
+
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["kampus"].lat,
+            cfg.poi["kampus"].lon,
+        ),
+    )
+
+    assert srv.current_status is None
+    assert 501 in srv._pending_alerts
+
+    expected_status = srv._pending_alerts[501][0].status
+    srv.handle_publish_confirm(501, True)
+
+    assert srv.current_status == expected_status
+    assert srv.last_alert is not None
+    assert srv.last_alert.status == expected_status
+    assert 501 not in srv._pending_alerts
+
+
+def test_publish_alert_gagal_tidak_mengubah_status(server):
+    srv, _, cfg = server
+    srv._publish = lambda topic, payload: 502
+
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["kampus"].lat,
+            cfg.poi["kampus"].lon,
+        ),
+    )
+
+    assert srv.current_status is None
+    assert 502 in srv._pending_alerts
+
+    srv.handle_publish_confirm(502, False)
+
+    assert srv.current_status is None
+    assert srv.last_alert is None
+    assert 502 not in srv._pending_alerts
+
+
+def test_konfirmasi_mid_tidak_dikenal_diabaikan(server):
+    srv, _, cfg = server
+    srv._publish = lambda topic, payload: 503
+
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["kampus"].lat,
+            cfg.poi["kampus"].lon,
+        ),
+    )
+
+    pending_before = dict(srv._pending_alerts)
+
+    srv.handle_publish_confirm(999, True)
+
+    assert srv.current_status is None
+    assert srv.last_alert is None
+    assert srv._pending_alerts == pending_before
+
+def test_anak_telemetry_kembali_fresh_setelah_data_baru(server):
+    srv, _, cfg = server
+    now = [1_790_000_000.0]
+    srv._clock = lambda: now[0]
+
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["kampus"].lat,
+            cfg.poi["kampus"].lon,
+            seq=1,
+        ),
+    )
+    assert srv.anak_telemetry_stale is False
+
+    now[0] += cfg.telemetry_stale_after_s + 1
+    assert srv.anak_telemetry_stale is True
+
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["kampus"].lat,
+            cfg.poi["kampus"].lon,
+            seq=2,
+        ),
+    )
+    assert srv.anak_telemetry_stale is False
+
+def test_status_yang_sama_tidak_mengantrekan_alert_berulang_saat_pending(server):
+    srv, _, cfg = server
+    published = []
+
+    def fake_publish(topic, payload):
+        published.append((topic, payload))
+        return 500 + len(published)
+
+    srv._publish = fake_publish
+
+    payload_pertama = anak_payload(
+        cfg.poi["kampus"].lat,
+        cfg.poi["kampus"].lon,
+        seq=1,
+    )
+
+    payload_kedua = anak_payload(
+        cfg.poi["kampus"].lat,
+        cfg.poi["kampus"].lon,
+        seq=2,
+    )
+
+    push(srv, cfg, payload_pertama)
+    jumlah_setelah_pertama = len(published)
+
+    push(srv, cfg, payload_kedua)
+
+    assert len(published) == jumlah_setelah_pertama
+
+def test_konfirmasi_lama_tidak_mengembalikan_status_ke_alert_lama(server):
+    srv, _, cfg = server
+    published = []
+
+    def fake_publish(topic, payload):
+        mid = 600 + len(published)
+        published.append((mid, payload))
+        return mid
+
+    srv._publish = fake_publish
+
+    # Alert pertama: lokasi kampus.
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["kampus"].lat,
+            cfg.poi["kampus"].lon,
+            seq=1,
+        ),
+    )
+
+    assert len(published) == 1
+    mid_a = published[0][0]
+
+    # Konfirmasi alert pertama agar perubahan status berikutnya
+    # dapat memicu alert baru.
+    srv.handle_publish_confirm(mid_a, True)
+    status_a = srv.current_status
+
+    # Alert kedua harus berasal dari status yang berbeda.
+    # Gunakan payload dari skenario yang memang menghasilkan
+    # status berbeda dalam tes yang sudah ada.
+    # Ganti payload di bawah dengan skenario tersebut.
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["bar"].lat,
+            cfg.poi["bar"].lon,
+            seq=2,
+        ),
+    )
+
+    assert len(published) == 2
+    mid_b = published[1][0]
+    status_b = published[1][1]["status"]
+
+    assert status_b != status_a
+
+    # Simulasikan konfirmasi B lebih dahulu, kemudian A.
+    srv.handle_publish_confirm(mid_b, True)
+    assert srv.current_status == status_b
+
+    # MID A sudah dikonfirmasi sebelumnya, sehingga konfirmasi
+    # ulang tidak boleh mengubah status B.
+    srv.handle_publish_confirm(mid_a, True)
+    assert srv.current_status == status_b
+
+def test_konfirmasi_publish_tidak_membuat_status_mundur(server):
+    srv, _, cfg = server
+    published = []
+
+    def fake_publish(topic, payload):
+        mid = 600 + len(published)
+        published.append((mid, payload))
+        return mid
+
+    srv._publish = fake_publish
+
+    # Alert A masuk pending.
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["kampus"].lat,
+            cfg.poi["kampus"].lon,
+            seq=1,
+        ),
+    )
+
+    assert len(published) == 1
+    mid_a = published[0][0]
+    status_a = published[0][1]["status"]
+
+    # Alert B harus berbeda status dan tetap bisa masuk pending.
+    push(
+        srv,
+        cfg,
+        anak_payload(
+            cfg.poi["bar"].lat,
+            cfg.poi["bar"].lon,
+            seq=2,
+        ),
+    )
+
+    assert len(published) == 2
+    mid_b = published[1][0]
+    status_b = published[1][1]["status"]
+
+    assert status_b != status_a
+
+    # Konfirmasi alert terbaru terlebih dahulu.
+    srv.handle_publish_confirm(mid_b, True)
+    assert srv.current_status == status_b
+
+    # Konfirmasi alert lama datang belakangan.
+    srv.handle_publish_confirm(mid_a, True)
+
+    # Status tidak boleh mundur ke alert A.
+    assert srv.current_status == status_b

@@ -12,7 +12,7 @@ import QrConnectModal from "@/components/QrConnectModal";
 import { useTelemetryStore } from "@/hooks/useTelemetryStore";
 import { useMqtt } from "@/hooks/useMqtt";
 import { MQTT_TOPICS } from "@/lib/mqttTopics";
-import { fetchOsrmStreetRoute } from "@/lib/mockData";
+import { fetchOsrmStreetRoute, getSimulatedTimestampMs } from "@/lib/mockData";
 import {
   AnakTelemetry,
   DemoPreset,
@@ -54,7 +54,7 @@ export default function DashboardPage() {
   const [clockDisplay, setClockDisplay] = useState("");
 
   const tripTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const seqRef = useRef<number>(0);
+  const seqRef = useRef<number>(Math.floor(Date.now() / 1000));
 
   useEffect(() => {
     const updateClock = () => {
@@ -150,10 +150,15 @@ export default function DashboardPage() {
 
       seqRef.current += 1;
       const rms = Number(Math.pow(10, (preset.db - 100) / 20).toFixed(4));
+      const simulatedSentAtMs = getSimulatedTimestampMs(
+        preset.time_display || preset.time_label,
+        seqRef.current
+      );
+
       const payload: AnakTelemetry = {
         device_id: "anak",
         sequence: seqRef.current,
-        sent_at_ms: Date.now(),
+        sent_at_ms: simulatedSentAtMs,
         location: {
           lat: preset.lat,
           lon: preset.lon,
@@ -169,7 +174,18 @@ export default function DashboardPage() {
       };
 
       ingestAnakTelemetry(payload, preset.time_label);
-      publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
+      const ok = publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
+
+      if (!ok) {
+        addEventLog({
+          sender: "Simulasi Sistem",
+          role: "dashboard",
+          title: "MQTT Belum Terhubung",
+          message: "Koneksi WSS ke broker sedang menghubungkan. Telemetri diupdate lokal.",
+          severity: "warning",
+          meta: "WSS Offline",
+        });
+      }
 
       addEventLog({
         sender: "Simulasi Sistem",
@@ -206,10 +222,14 @@ export default function DashboardPage() {
 
       seqRef.current += 1;
       const rms = Number(Math.pow(10, (defaultDb - 100) / 20).toFixed(4));
+      const simulatedSentAtMs = getSimulatedTimestampMs(
+        defaultTime,
+        seqRef.current
+      );
       const payload: AnakTelemetry = {
         device_id: "anak",
         sequence: seqRef.current,
-        sent_at_ms: Date.now(),
+        sent_at_ms: simulatedSentAtMs,
         location: {
           lat: spot.lat,
           lon: spot.lon,
@@ -225,9 +245,19 @@ export default function DashboardPage() {
       };
 
       ingestAnakTelemetry(payload, defaultTime);
-      publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
+      const ok = publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
+      if (!ok) {
+        addEventLog({
+          sender: "Peta Interaktif",
+          role: "dashboard",
+          title: "MQTT Belum Terhubung",
+          message: "Koneksi WSS ke broker sedang menghubungkan. Telemetri diupdate lokal.",
+          severity: "warning",
+          meta: "WSS Offline",
+        });
+      }
     },
-    [stopLiveTrip, setActiveRouteCoords, ingestAnakTelemetry, publishRaw]
+    [stopLiveTrip, setActiveRouteCoords, ingestAnakTelemetry, publishRaw, addEventLog]
   );
 
   const handleStartLiveTrip = useCallback(
@@ -276,10 +306,14 @@ export default function DashboardPage() {
 
         seqRef.current += 1;
         const rms = Number(Math.pow(10, (currentDb - 100) / 20).toFixed(4));
+        const simulatedSentAtMs = getSimulatedTimestampMs(
+          route.time_label,
+          seqRef.current
+        );
         const payload: AnakTelemetry = {
           device_id: "anak",
           sequence: seqRef.current,
-          sent_at_ms: Date.now(),
+          sent_at_ms: simulatedSentAtMs,
           location: {
             lat: Number(lat.toFixed(6)),
             lon: Number(lon.toFixed(6)),

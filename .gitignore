@@ -69,3 +69,7 @@ ehthumbs.db
 desktop.ini
 
 .vscode
+
+# Local Python virtual environments
+/server/.venv/
+/server/.venv*/
