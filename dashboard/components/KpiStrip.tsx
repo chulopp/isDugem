@@ -34,94 +34,119 @@ export default function KpiStrip({
       ? { label: "Sedang", color: "text-amber-600", barColor: "bg-amber-500" }
       : { label: "Tenang", color: "text-emerald-600", barColor: "bg-emerald-500" };
 
-  const bars = [0.45, 0.75, 1.0, 0.65, 0.85, 0.5];
+  const bars = [0.45, 0.75, 1.0, 0.65, 0.85];
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 px-5 rounded-3xl bg-white/80 backdrop-blur-xl border border-slate-200/80 shadow-glass min-h-[88px]">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 md:gap-3 xl:gap-4 py-3 px-3.5 sm:px-4.5 rounded-3xl bg-white/80 backdrop-blur-xl border border-slate-200/80 shadow-glass">
         {/* KPI 1: Status Sistem */}
-        <div className="flex items-center gap-3.5 md:border-r border-slate-200/70 md:pr-4 min-w-0">
-          <div
-            className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 border ${statusInfo.badgeBg} ${statusInfo.borderColor}`}
-          >
-            {statusInfo.severity === "critical" ? (
-              <ShieldAlert className={`w-5 h-5 ${statusInfo.badgeText}`} />
-            ) : (
-              <ShieldCheck className={`w-5 h-5 ${statusInfo.badgeText}`} />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-slate-400">Status Sistem</p>
-            <div className="flex items-center gap-2 mt-0.5 flex-nowrap min-w-0">
-              <span className="text-sm font-bold text-slate-900 tracking-tight truncate shrink-0">
-                {statusInfo.label}
-              </span>
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 ${statusInfo.badgeBg} ${statusInfo.badgeText}`}
+        <div className="flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-200/70 pb-2.5 md:pb-0 md:pr-2.5 xl:pr-4 min-w-0 overflow-hidden">
+          {/* Baris Atas: Ikon + Label (dan badge di layar monitor besar) */}
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div
+                className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 border ${statusInfo.badgeBg} ${statusInfo.borderColor}`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dotColor}`} />
-                {statusInfo.shortLabel}
-              </span>
+                {statusInfo.severity === "critical" ? (
+                  <ShieldAlert className={`w-3.5 h-3.5 ${statusInfo.badgeText}`} />
+                ) : (
+                  <ShieldCheck className={`w-3.5 h-3.5 ${statusInfo.badgeText}`} />
+                )}
+              </div>
+              <p className="text-xs font-semibold text-slate-500 truncate">
+                Status Sistem
+              </p>
             </div>
+            <span
+              className={`hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${statusInfo.badgeBg} ${statusInfo.badgeText}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusInfo.dotColor}`} />
+              <span className="truncate max-w-[65px]">{statusInfo.shortLabel}</span>
+            </span>
+          </div>
+
+          {/* Baris Bawah: Status Utama Selebar Kolom */}
+          <div className="mt-1.5 min-w-0">
+            <span
+              className="block text-xs sm:text-sm xl:text-base font-bold text-slate-900 tracking-tight truncate"
+              title={statusInfo.label}
+            >
+              {statusInfo.label}
+            </span>
           </div>
         </div>
 
         {/* KPI 2: Tingkat Suara (Audio Visualizer) */}
-        <div className="flex items-center gap-3.5 md:border-r border-slate-200/70 md:px-2 min-w-0">
-          <div className="w-11 h-11 rounded-full bg-slate-100/90 border border-slate-200/70 flex items-center justify-center shrink-0">
-            <Volume2 className="w-5 h-5 text-slate-700" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-slate-400">Tingkat Suara</p>
-            <div className="flex items-center gap-2.5 mt-0.5">
-              <span className="text-base font-bold text-slate-900 shrink-0">
-                {db.toFixed(1)} dB
-              </span>
-              <span className={`text-xs font-semibold shrink-0 ${dbCategory.color}`}>
-                {dbCategory.label}
-              </span>
-              {/* Mini Equalizer */}
-              <div className="flex items-end gap-0.5 h-4 ml-auto pr-2 shrink-0">
-                {bars.map((mult, idx) => {
-                  const pct = Math.max(
-                    18,
-                    Math.min(100, Math.round((db / 100) * mult * 100))
-                  );
-                  return (
-                    <span
-                      key={idx}
-                      style={{ height: `${pct}%` }}
-                      className={`w-1 rounded-full transition-all duration-300 ${dbCategory.barColor}`}
-                    />
-                  );
-                })}
+        <div className="flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-200/70 pb-2.5 md:pb-0 md:px-2.5 xl:px-4 min-w-0 overflow-hidden">
+          {/* Baris Atas: Ikon + Label & Mini Equalizer */}
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-6 h-6 rounded-md bg-slate-100 border border-slate-200/70 flex items-center justify-center shrink-0">
+                <Volume2 className="w-3.5 h-3.5 text-slate-700" />
               </div>
+              <p className="text-xs font-semibold text-slate-500 truncate">
+                Tingkat Suara
+              </p>
             </div>
+            {/* Mini Equalizer di baris atas kanan */}
+            <div className="flex items-end gap-0.5 h-3 shrink-0">
+              {bars.map((mult, idx) => {
+                const pct = Math.max(
+                  20,
+                  Math.min(100, Math.round((db / 100) * mult * 100))
+                );
+                return (
+                  <span
+                    key={idx}
+                    style={{ height: `${pct}%` }}
+                    className={`w-0.5 rounded-full transition-all duration-300 ${dbCategory.barColor}`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Baris Bawah: Angka Desibel + Kategori */}
+          <div className="mt-1.5 flex items-baseline gap-1.5 min-w-0">
+            <span className="text-xs sm:text-sm xl:text-base font-bold text-slate-900 shrink-0">
+              {db.toFixed(1)} <span className="text-[11px] font-semibold text-slate-400">dB</span>
+            </span>
+            <span className={`text-xs font-semibold truncate ${dbCategory.color}`}>
+              • {dbCategory.label}
+            </span>
           </div>
         </div>
 
         {/* KPI 3: Jarak & Kecepatan */}
-        <div className="flex items-center gap-3.5 md:pl-2 min-w-0">
-          <div className="w-11 h-11 rounded-full bg-slate-100/90 border border-slate-200/70 flex items-center justify-center shrink-0">
-            <Navigation className="w-5 h-5 text-slate-700" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-slate-400">
-              Titik Terdekat
-            </p>
-            <div className="flex items-center gap-2 mt-0.5 flex-nowrap min-w-0">
-              <span className="text-base font-bold text-slate-900 shrink-0">
-                {Math.round(nearestSpotDist)} m
-              </span>
-              <span className="text-xs font-semibold text-slate-600 truncate flex-1 min-w-0" title={nearestSpot.name}>
-                {nearestSpot.name}
-              </span>
-              {speedKmh > 0 && (
-                <span className="px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 text-[11px] font-semibold shrink-0">
-                  {speedKmh} km/j
-                </span>
-              )}
+        <div className="flex flex-col justify-between md:pl-2.5 xl:pl-4 min-w-0 overflow-hidden">
+          {/* Baris Atas: Ikon + Label & Kecepatan */}
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-6 h-6 rounded-md bg-slate-100 border border-slate-200/70 flex items-center justify-center shrink-0">
+                <Navigation className="w-3.5 h-3.5 text-slate-700" />
+              </div>
+              <p className="text-xs font-semibold text-slate-500 truncate">
+                Titik Terdekat
+              </p>
             </div>
+            {speedKmh > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 text-[10px] font-semibold shrink-0">
+                {speedKmh} km/j
+              </span>
+            )}
+          </div>
+
+          {/* Baris Bawah: Jarak dan Nama Lokasi */}
+          <div className="mt-1.5 flex items-baseline gap-1.5 min-w-0">
+            <span className="text-xs sm:text-sm xl:text-base font-bold text-slate-900 shrink-0">
+              {Math.round(nearestSpotDist)} <span className="text-[11px] font-semibold text-slate-400">m</span>
+            </span>
+            <span
+              className="text-xs font-medium text-slate-600 truncate min-w-0 flex-1"
+              title={nearestSpot.name}
+            >
+              {nearestSpot.name}
+            </span>
           </div>
         </div>
       </div>

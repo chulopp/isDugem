@@ -131,9 +131,6 @@ export default function Sidebar({
               }`}
             >
               <span>Kode QR HP</span>
-              <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-xs flex items-center justify-center font-semibold">
-                +
-              </span>
             </span>
           </button>
         </nav>
@@ -166,9 +163,6 @@ export default function Sidebar({
           >
             <p className="text-xs font-bold text-slate-800 leading-tight">
               Broker {isMqttConnected ? "Aktif" : "Lokal"}
-            </p>
-            <p className="text-[10px] font-mono text-slate-400 truncate">
-              {PROJECT_ID}
             </p>
           </div>
         </div>

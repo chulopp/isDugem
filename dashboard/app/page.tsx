@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, ChevronDown, Check } from "lucide-react";
 import Sidebar, { NavTab } from "@/components/Sidebar";
 import KpiStrip from "@/components/KpiStrip";
 import MapPanel from "@/components/MapPanel";
@@ -64,6 +64,23 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<NavTab>("overview");
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
+  const timeDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        timeDropdownRef.current &&
+        !timeDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsTimeDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [isTripRunning, setIsTripRunning] = useState(false);
   const [activeTripId, setActiveTripId] = useState<string | null>(null);
@@ -395,20 +412,61 @@ export default function DashboardPage() {
     [publishCommand, addEventLog]
   );
 
-  const timeModes: { id: TimeMode; label: string }[] = [
-    { id: "auto", label: "Real-time" },
-    { id: "jam_kuliah", label: "Jam Kuliah" },
-    { id: "waktu_sholat", label: "Waktu Sholat" },
-    { id: "jam_malam", label: "Jam Malam" },
-    { id: "lainnya", label: "Normal" },
-  ];
-
   const activeTimeDesc: Record<TimeLabel, string> = {
     jam_kuliah: "Jam Kuliah",
     waktu_sholat: "Waktu Sholat",
     jam_malam: "Jam Malam",
     lainnya: "Normal",
   };
+
+  const timeSimulationOptions: {
+    id: TimeMode;
+    label: string;
+    badge: string;
+    sublabel: string;
+    dotColor: string;
+  }[] = [
+    {
+      id: "auto",
+      label: "Otomatis (Ikuti Jam Asli)",
+      badge: "Otomatis",
+      sublabel: `Sesuai jam server (${activeTimeDesc[activeTimeLabel]})`,
+      dotColor: "bg-emerald-500",
+    },
+    {
+      id: "jam_kuliah",
+      label: "Simulasi Jam Kuliah",
+      badge: "09:00 WIB",
+      sublabel: "Aturan Geofence Kampus UNDIP",
+      dotColor: "bg-sky-500",
+    },
+    {
+      id: "waktu_sholat",
+      label: "Simulasi Waktu Sholat",
+      badge: "12:15 WIB",
+      sublabel: "Aturan Geofence Masjid Kampus",
+      dotColor: "bg-emerald-600",
+    },
+    {
+      id: "jam_malam",
+      label: "Simulasi Jam Malam",
+      badge: "23:00 WIB",
+      sublabel: "Aturan Geofence Bar & Kos",
+      dotColor: "bg-rose-500",
+    },
+    {
+      id: "lainnya",
+      label: "Simulasi Jam Santai / Normal",
+      badge: "16:00 WIB",
+      sublabel: "Di luar jam wajib (Aman)",
+      dotColor: "bg-slate-400",
+    },
+  ];
+
+  const currentOption =
+    timeSimulationOptions.find((opt) => opt.id === timeMode) ||
+    timeSimulationOptions[0];
+
 
   return (
     <div className="min-h-screen bg-[#ECEFF4] p-0 lg:p-4 flex items-stretch justify-center">
@@ -432,13 +490,9 @@ export default function DashboardPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
                 Dashboard Pemantauan
               </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Data lokasi, tingkat suara, dan gerak perangkat anak secara
-                langsung.
-              </p>
             </div>
 
-            {/* Tanggal, Jam Real-time & Pemilih Mode Waktu */}
+            {/* Tanggal, Jam Real-time & Dropdown Mode Waktu Demo */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-sm">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -450,26 +504,66 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="inline-flex items-center gap-1 p-1 rounded-2xl bg-slate-200/70 border border-slate-200 flex-wrap">
-                <Clock className="w-3.5 h-3.5 text-slate-500 ml-2 mr-1" />
-                {timeModes.map((tm) => {
-                  const isSelected = timeMode === tm.id;
-                  return (
-                    <button
-                      key={tm.id}
-                      onClick={() => updateTimeMode(tm.id)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
-                        isSelected
-                          ? "bg-white text-slate-900 shadow-sm"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      {tm.id === "auto"
-                        ? `Real-time (${activeTimeDesc[activeTimeLabel]})`
-                        : tm.label}
-                    </button>
-                  );
-                })}
+              {/* Solusi A: Dropdown Mode Waktu Demo */}
+              <div className="relative" ref={timeDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsTimeDropdownOpen((prev) => !prev)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition-all"
+                >
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${currentOption.dotColor}`} />
+                  <span className="text-slate-800">
+                    {timeMode === "auto"
+                      ? `Mode: Otomatis (${activeTimeDesc[activeTimeLabel]})`
+                      : `Mode: ${currentOption.label}`}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                      isTimeDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {isTimeDropdownOpen && (
+                  <div className="absolute right-0 mt-1.5 w-72 rounded-2xl bg-white/95 backdrop-blur-xl border border-slate-200 shadow-xl p-1.5 z-50 space-y-1">
+                    <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                      Pilih Konteks Waktu Demo
+                    </div>
+                    {timeSimulationOptions.map((opt) => {
+                      const isSelected = timeMode === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            updateTimeMode(opt.id);
+                            setIsTimeDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between transition-all ${
+                            isSelected
+                              ? "bg-slate-100 font-bold text-slate-900"
+                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dotColor}`} />
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-800 truncate">{opt.label}</p>
+                              <p className="text-[10px] text-slate-400 truncate">{opt.sublabel}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono font-medium">
+                              {opt.badge}
+                            </span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
