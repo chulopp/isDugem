@@ -45,7 +45,7 @@ export const POI_SPOTS: PoiSpot[] = [
     area: "Tembalang",
     lat: -7.067588,
     lon: 110.439708,
-    radius_m: 50,
+    radius_m: 750,
     color: "#6366F1",
   },
   {
@@ -55,7 +55,7 @@ export const POI_SPOTS: PoiSpot[] = [
     area: "Tembalang",
     lat: -7.062817,
     lon: 110.440401,
-    radius_m: 50,
+    radius_m: 750,
     color: "#6366F1",
   },
   {
@@ -65,7 +65,7 @@ export const POI_SPOTS: PoiSpot[] = [
     area: "Tembalang",
     lat: -7.059141,
     lon: 110.435523,
-    radius_m: 50,
+    radius_m: 750,
     color: "#6366F1",
   },
   {
@@ -75,7 +75,7 @@ export const POI_SPOTS: PoiSpot[] = [
     area: "Semarang Bawah",
     lat: -6.968,
     lon: 110.4285,
-    radius_m: 100,
+    radius_m: 250,
     color: "#E11D48",
   },
   {
@@ -85,7 +85,7 @@ export const POI_SPOTS: PoiSpot[] = [
     area: "Semarang Bawah",
     lat: -6.966445,
     lon: 110.430036,
-    radius_m: 100,
+    radius_m: 250,
     color: "#E11D48",
   },
   {
@@ -95,7 +95,7 @@ export const POI_SPOTS: PoiSpot[] = [
     area: "Semarang Bawah",
     lat: -6.966984,
     lon: 110.429807,
-    radius_m: 100,
+    radius_m: 250,
     color: "#E11D48",
   },
   {
@@ -105,7 +105,7 @@ export const POI_SPOTS: PoiSpot[] = [
     area: "Semarang Bawah",
     lat: -6.965717,
     lon: 110.429464,
-    radius_m: 100,
+    radius_m: 250,
     color: "#E11D48",
   },
 ];
@@ -209,15 +209,15 @@ export function evaluateTelemetryLocally(
     nearestSpotDist,
   } = computeDistancesToCategories(lat, lon);
 
-  const claimedAtKos = distKos <= 50.0;
+  const claimedAtKos = distKos <= 750.0;
   let status: AlertStatus = "NORMAL";
 
   if (timeLabel === "jam_malam") {
     if (claimedAtKos && db > 80.0) {
       status = "ANOMALY_FAKE_GPS";
-    } else if (distBar <= 100.0 && db > 75.0) {
+    } else if (distBar <= 250.0 && db > 75.0) {
       status = "CRITICAL_TERDETEKSI_DI_BAR";
-    } else if (distKos <= 50.0 && db < 55.0) {
+    } else if (distKos <= 750.0 && db < 55.0) {
       status = "ISTIRAHAT_DI_KOS";
     }
   } else if (timeLabel === "jam_kuliah") {

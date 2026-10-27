@@ -122,4 +122,30 @@ describe("useTelemetryStore: alert backend", () => {
     expect(result.current.latestTelemetry.sequence).toBe(1);
     expect(result.current.events).toHaveLength(1);
   });
+
+  it("memisahkan data lokasi telemetri terbaru dari alert backend lama", () => {
+    const { result } = renderHook(() => useTelemetryStore());
+    const initialAlert = makeAlert("WARNING_BELUM_KE_MASJID", 1000, "Jarak ke masjid 297m");
+
+    act(() => {
+      result.current.ingestServerAlert(initialAlert);
+    });
+
+    // Anak bergerak ke lokasi baru
+    const newTelemetry = makeTelemetry();
+    newTelemetry.sequence = 2;
+    newTelemetry.location.lat = -6.968; // Area bar Kota Lama
+    newTelemetry.location.lon = 110.4285;
+
+    act(() => {
+      result.current.ingestAnakTelemetry(newTelemetry);
+    });
+
+    // Koordinat telemetri terbaru harus diperbarui
+    expect(result.current.latestTelemetry.location.lat).toBe(-6.968);
+    expect(result.current.latestTelemetry.sequence).toBe(2);
+    // Namun status alert backend tetap tidak diubah oleh client-side guessing
+    expect(result.current.latestAlert.status).toBe("WARNING_BELUM_KE_MASJID");
+    expect(result.current.latestAlert.reason).toBe("Jarak ke masjid 297m");
+  });
 });

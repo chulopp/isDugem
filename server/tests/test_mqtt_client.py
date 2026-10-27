@@ -143,3 +143,35 @@ def test_publish_json_returns_false_on_queue_error(monkeypatch):
     )
 
     assert result is False
+
+
+def test_tls_context_enforces_cert_verification(monkeypatch):
+    import ssl
+
+    cfg = MagicMock()
+    cfg.project_id = "isdugem_tim_01"
+    cfg.mqtt_use_tls = True
+    cfg.mqtt_username = None
+    cfg.mqtt_password = None
+    cfg.mqtt_qos = 1
+
+    subscriptions = ("rantauguard/isdugem_tim_01/alerts",)
+
+    captured_contexts = []
+    real_create_default_context = ssl.create_default_context
+
+    def spy_create_default_context(*args, **kwargs):
+        ctx = real_create_default_context(*args, **kwargs)
+        captured_contexts.append(ctx)
+        return ctx
+
+    monkeypatch.setattr(ssl, "create_default_context", spy_create_default_context)
+
+    client = MqttClient(cfg, subscriptions)
+    assert len(captured_contexts) == 1
+    ctx = captured_contexts[0]
+
+    # Pastikan verifikasi sertifikat TLS AKTIF dan tidak pernah dimatikan
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+    assert ctx.check_hostname is True
+    assert ctx.minimum_version == ssl.TLSVersion.TLSv1_2

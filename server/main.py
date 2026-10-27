@@ -24,7 +24,7 @@ from processing.decision_engine import (
 
 logger = logging.getLogger("rantauguard.server")
 
-PublishFn = Callable[[str, Dict[str, Any]], Any]
+PublishFn = Callable[..., Any]
 
 DB_MISMATCH_LOG_THRESHOLD = 6.0
 
@@ -79,6 +79,7 @@ class GuardianServer:
 
     def _handle_anak(self, data: Any) -> None:
         tel = AnakTelemetry.from_payload(data)
+        now_s = self._clock()
 
         if tel.sent_at_ms is not None:
             key = (tel.sequence, tel.sent_at_ms)
@@ -88,13 +89,42 @@ class GuardianServer:
                 last_sequence, last_sent_at_ms = last_key
 
                 if tel.sequence < last_sequence:
-                    logger.warning(
-                        "Telemetry anak out-of-order dibuang: "
-                        "sequence=%d, sequence terakhir=%d",
-                        tel.sequence,
-                        last_sequence,
+                    # Evaluasi apakah paket adalah reset sequence sah atau paket out-of-order usang:
+                    # 1. Waktu pengiriman maju (sent_at_ms >= last_sent_at_ms):
+                    #    - Sequence kembali ke awal (seq <= 5) -> client restart / sesi baru.
+                    #    - Sequence melompat mundur sangat besar (> 1000) DENGAN waktu maju -> counter rollover.
+                    # 2. Jika waktu pengiriman lebih lama (sent_at_ms < last_sent_at_ms):
+                    #    - Paket tersebut dibuat di masa lalu, sehingga merupakan paket out-of-order/tertunda
+                    #      dan WAJIB dibuang agar tidak menimpa status live.
+                    #    - Pengecualian hanya jika perangkat restart setelah jeda telemetri basi (stale >= 60s)
+                    #      dengan sequence kembali ke 1.
+                    time_advanced = tel.sent_at_ms >= last_sent_at_ms
+                    session_idle_s = now_s - (self._last_anak_received_s or 0)
+                    restart_after_stale = tel.sequence <= 1 and session_idle_s >= self.cfg.telemetry_stale_after_s
+
+                    is_reset = (
+                        (time_advanced and (tel.sequence <= 5 or (last_sequence - tel.sequence > 1000)))
+                        or restart_after_stale
                     )
-                    return
+
+                    if is_reset:
+                        logger.info(
+                            "Sequence reset terdeteksi: seq=%d (sebelumnya=%d, sent_at=%d, last_sent_at=%d)",
+                            tel.sequence,
+                            last_sequence,
+                            tel.sent_at_ms,
+                            last_sent_at_ms,
+                        )
+                    else:
+                        logger.warning(
+                            "Telemetry anak out-of-order dibuang: "
+                            "sequence=%d (sent_at=%d), sequence terakhir=%d (sent_at=%d)",
+                            tel.sequence,
+                            tel.sent_at_ms,
+                            last_sequence,
+                            last_sent_at_ms,
+                        )
+                        return
 
                 if key == last_key:
                     logger.debug("Duplikat telemetri anak dibuang: %s", key)
@@ -102,7 +132,6 @@ class GuardianServer:
 
             self._last_anak_key = key
 
-        now_s = self._clock()
         self.latest_anak = tel
         self._last_anak_received_s = now_s
         alert = self.evaluate(tel, now_s)
@@ -132,19 +161,27 @@ class GuardianServer:
 
         changed = alert.status != reference_status
 
+        # Periksa apakah jarak atau alasan berubah signifikan saat status sama
+        reason_changed = False
+        if not changed and self.last_alert is not None:
+            dist_diff = abs(alert.context.distance_m - self.last_alert.context.distance_m)
+            if dist_diff >= 15.0 or alert.reason != self.last_alert.reason:
+                reason_changed = True
+
         heartbeat = self.cfg.alert_heartbeat_s
         heartbeat_due = heartbeat > 0 and (
             now_s - self._last_publish_s
         ) >= heartbeat
 
         # Jangan mengantrekan alert identik jika status tersebut
-        # sudah menunggu konfirmasi publish.
+        # sudah menunggu konfirmasi publish tanpa perubahan alasan.
         same_status_pending = (
             latest_pending is not None
             and latest_pending[0].status == alert.status
+            and not reason_changed
         )
 
-        if changed or (heartbeat_due and not same_status_pending):
+        if changed or reason_changed or (heartbeat_due and not same_status_pending):
             self._publish_alert(alert, now_s)
 
     def _handle_ortu(self, data: Any) -> None:
@@ -226,10 +263,17 @@ class GuardianServer:
                 alert.reason,
             )
             try:
-                result = self._publish(
-                    self.cfg.topic_alerts,
-                    alert.to_payload(),
-                )
+                try:
+                    result = self._publish(
+                        self.cfg.topic_alerts,
+                        alert.to_payload(),
+                        retain=True,
+                    )
+                except TypeError:
+                    result = self._publish(
+                        self.cfg.topic_alerts,
+                        alert.to_payload(),
+                    )
             except Exception:
                 logger.exception("Gagal mengantrekan publish alert")
                 return
