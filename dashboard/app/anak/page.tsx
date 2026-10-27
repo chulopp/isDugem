@@ -83,6 +83,8 @@ export default function AnakEdgePage() {
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pubIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
 
   const { isConnected, publishRaw } = useMqtt({
     onCommand: (topic, payload: CommandPayload) => {
@@ -135,6 +137,14 @@ export default function AnakEdgePage() {
       audioStreamRef.current.getTracks().forEach((t) => t.stop());
       audioStreamRef.current = null;
     }
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    if (motionHandlerRef.current && typeof window !== "undefined") {
+      window.removeEventListener("devicemotion", motionHandlerRef.current);
+      motionHandlerRef.current = null;
+    }
     setSensorActive(false);
   }, []);
 
@@ -171,6 +181,7 @@ export default function AnakEdgePage() {
         (window as unknown as { webkitAudioContext: typeof AudioContext })
           .webkitAudioContext;
       const audioCtx = new AudioCtx();
+      audioCtxRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
@@ -200,7 +211,19 @@ export default function AnakEdgePage() {
 
     // 3. DeviceMotion API (Accelerometer)
     if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
-      window.addEventListener("devicemotion", (ev) => {
+      if (
+        typeof (DeviceMotionEvent as unknown as { requestPermission?: () => Promise<string> })
+          .requestPermission === "function"
+      ) {
+        try {
+          await (DeviceMotionEvent as unknown as { requestPermission: () => Promise<string> })
+            .requestPermission();
+        } catch {
+          // Abaikan jika izin iOS ditolak
+        }
+      }
+
+      const onMotion = (ev: DeviceMotionEvent) => {
         const acc = ev.accelerationIncludingGravity;
         if (acc) {
           const mag = Math.sqrt(
@@ -210,7 +233,13 @@ export default function AnakEdgePage() {
           stateRef.current.accel = roundedMag;
           setAccelMag(roundedMag);
         }
-      });
+      };
+
+      if (motionHandlerRef.current) {
+        window.removeEventListener("devicemotion", motionHandlerRef.current);
+      }
+      motionHandlerRef.current = onMotion;
+      window.addEventListener("devicemotion", onMotion);
     }
 
     // 4. Interval Pengiriman Telemetri MQTT (Tiap 2.5 detik)

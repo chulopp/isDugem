@@ -16,6 +16,7 @@ import {
   MQTT_TOPICS,
   STATUS_DISPLAY,
   evaluateTelemetryLocally,
+  getRealtimeTimeLabel,
 } from "@/lib/mqttTopics";
 import { Alert, AnakTelemetry, OrtuTelemetry } from "@/lib/types";
 
@@ -34,6 +35,7 @@ export default function OrtuEdgePage() {
   const accelRef = useRef(9.8);
   const shakeFlagRef = useRef(false);
   const pubIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
 
   const { isConnected, publishRaw, publishCommand } = useMqtt({
     onAlert: (payload) => {
@@ -44,7 +46,7 @@ export default function OrtuEdgePage() {
         payload.location.lat,
         payload.location.lon,
         payload.audio.db,
-        "jam_malam"
+        getRealtimeTimeLabel(new Date())
       );
       setChildAlert(evaluated);
     },
@@ -69,14 +71,30 @@ export default function OrtuEdgePage() {
       clearInterval(pubIntervalRef.current);
       pubIntervalRef.current = null;
     }
+    if (motionHandlerRef.current && typeof window !== "undefined") {
+      window.removeEventListener("devicemotion", motionHandlerRef.current);
+      motionHandlerRef.current = null;
+    }
     setSensorActive(false);
   }, []);
 
-  const startOrtuSensor = () => {
+  const startOrtuSensor = async () => {
     setSensorActive(true);
 
     if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
-      window.addEventListener("devicemotion", (ev) => {
+      if (
+        typeof (DeviceMotionEvent as unknown as { requestPermission?: () => Promise<string> })
+          .requestPermission === "function"
+      ) {
+        try {
+          await (DeviceMotionEvent as unknown as { requestPermission: () => Promise<string> })
+            .requestPermission();
+        } catch {
+          // Abaikan jika izin iOS ditolak
+        }
+      }
+
+      const onMotion = (ev: DeviceMotionEvent) => {
         const acc = ev.accelerationIncludingGravity;
         if (!acc) return;
         const mag = Math.sqrt(
@@ -101,7 +119,13 @@ export default function OrtuEdgePage() {
             setIsShaking(false);
           }, 1500);
         }
-      });
+      };
+
+      if (motionHandlerRef.current) {
+        window.removeEventListener("devicemotion", motionHandlerRef.current);
+      }
+      motionHandlerRef.current = onMotion;
+      window.addEventListener("devicemotion", onMotion);
     }
 
     pubIntervalRef.current = setInterval(() => {
