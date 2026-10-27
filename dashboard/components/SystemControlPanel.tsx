@@ -62,7 +62,7 @@ export default function SystemControlPanel({
   };
 
   return (
-    <aside className="w-full xl:w-[345px] shrink-0 flex flex-col justify-between p-6 border-t xl:border-t-0 xl:border-l border-slate-200/80 bg-white/75 backdrop-blur-xl">
+    <aside className="w-full lg:w-[320px] xl:w-[345px] shrink-0 flex flex-col justify-between p-5 xl:p-6 border-t lg:border-t-0 lg:border-l border-slate-200/80 bg-white/75 backdrop-blur-xl">
       <div>
         {/* Kartu Atas: Panel Kontrol Sistem */}
         <div className="p-5 rounded-3xl bg-slate-100/85 border border-slate-200/80 text-center">
