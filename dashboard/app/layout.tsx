@@ -9,8 +9,11 @@ export const metadata: Metadata = {
   description:
     "Sistem pemantauan lokasi, tingkat suara, dan gerak perangkat berbasis MQTT.",
   icons: {
-    icon: "/icon.png",
-    shortcut: "/icon.png",
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
     apple: "/icon.png",
   },
 };
