@@ -1,5 +1,5 @@
 # 🛡️ RantauGuard (isDugem)
-### Smart Student & Parental Guardian System — IoT Multicommunication 2 Arah & Multisensor
+### Smart Student & Parental Guardian System - IoT Multicommunication 2 Arah & Multisensor
 
 [![Status](https://img.shields.io/badge/Status-Active%20Development-blue.svg)](#)
 [![Python Tests](https://img.shields.io/badge/Python%20Tests-155%20Passed-brightgreen.svg)](#)

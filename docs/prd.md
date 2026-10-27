@@ -1,20 +1,20 @@
-# PRD — RantauGuard
+# PRD - RantauGuard
 ### Smart Student & Parental Guardian System
-**Mata Kuliah:** Internet of Things — Tugas Praktek Multicommunication 2 Arah & Multisensor
+**Mata Kuliah:** Internet of Things - Tugas Praktek Multicommunication 2 Arah & Multisensor
 **Tim:** 3 orang · **Deadline:** 1 minggu dari briefing tugas
-**Versi dokumen:** v2 — detail teknis untuk eksekusi (manusia & AI coding agent)
+**Versi dokumen:** v2.1 — All-in-One Vercel HTTPS Cloud Deployment (Next.js App Router) & Detail Teknis Eksekusi
 
 ---
 
 ## 0. Cara Pakai Dokumen Ini
 
-Dokumen ini ditulis supaya setiap bagian bisa langsung di-copy ke AI coding agent (Claude Code, Cursor, dll) per modul, tanpa perlu konteks tambahan. Setiap modul punya: tanggung jawab, struktur folder, kontrak data (schema persis), dan definisi fungsi. Jangan ubah nama topic MQTT atau field JSON tanpa update dokumen ini — ketiga modul saling bergantung pada kontrak ini.
+Dokumen ini ditulis supaya setiap bagian bisa langsung di-copy ke AI coding agent (Claude Code, Cursor, dll) per modul, tanpa perlu konteks tambahan. Setiap modul punya: tanggung jawab, struktur folder, kontrak data (schema persis), dan definisi fungsi. Jangan ubah nama topic MQTT atau field JSON tanpa update dokumen ini - ketiga modul saling bergantung pada kontrak ini.
 
 ---
 
 ## 1. Latar Belakang & Masalah
 
-Mahasiswa rantau sering sulit dipantau orang tua: GPS saja bisa dimanipulasi (*fake GPS*), seolah-olah di kos/masjid padahal di tempat lain. Kombinasi **lokasi (GPS)** + **suasana suara (mikrofon)** saling memvalidasi — lokasi bisa dipalsukan, suasana suara ruangan (hening masjid vs dentuman bar) jauh lebih sulit dipalsukan konsisten.
+Mahasiswa rantau sering sulit dipantau orang tua: GPS saja bisa dimanipulasi (*fake GPS*), seolah-olah di kos/masjid padahal di tempat lain. Kombinasi **lokasi (GPS)** + **suasana suara (mikrofon)** saling memvalidasi - lokasi bisa dipalsukan, suasana suara ruangan (hening masjid vs dentuman bar) jauh lebih sulit dipalsukan konsisten.
 
 ## 2. Tujuan Produk
 
@@ -27,40 +27,41 @@ Mahasiswa rantau sering sulit dipantau orang tua: GPS saja bisa dimanipulasi (*f
 
 | # | Ketentuan Tugas | Pemenuhan |
 |---|---|---|
-| 1 | Kelompok 3–4 orang | Tim 3 orang (Bagian 10) |
+| 1 | Kelompok 3-4 orang | Tim 3 orang (Bagian 10) |
 | 2 | Min. 2 edge device, min. 2 sensor | Edge 1 = HP Anak (GPS + Mikrofon + Accelerometer); Edge 2 = HP Ortu (Accelerometer/Gyroscope shake-to-ping + lokasi rumah) |
 | 3 | Min. 2 data processing | Haversine distance geofencing; Audio RMS → desibel |
 | 4 | Algoritma AI/lain | Context-Aware Fusion Decision Table (rule-based classifier) |
 | 5 | Min. 1 protokol ke cloud | MQTT over TLS/WSS (broker publik HiveMQ) |
-| 6 | Dashboard satu jaringan (opsional) | Dibuat sebagai fitur andalan — Next.js app |
+| 6 | Dashboard satu jaringan (opsional) | Dibuat sebagai fitur andalan - Next.js app |
 | 7 | Ide tidak boleh sama kelompok lain | Kombinasi GPS+Audio+shake-to-ping, belum ada di contoh dosen |
 
-## 4. Tech Stack
+## 4. Tech Stack & Deployment Architecture
 
 | Modul | Stack | Alasan |
 |---|---|---|
-| Edge device (Anak & Ortu) | **Web app** (HTML/JS statis, Geolocation API + Web Audio API + DeviceMotion API), dieksekusi di browser HP (Chrome/Safari) | Tidak butuh install apk, langsung bisa dipakai di Android & iPhone, mirip pola `iot.myudak.com` di contoh dosen |
+| Edge device (Anak & Ortu) | **Next.js App Router Client Pages (`/anak`, `/ortu`)** (Geolocation API + Web Audio API + DeviceMotion API) dengan fallback file statis di `edge/` | Berjalan di browser HP via HTTPS resmi Vercel, bebas pembatasan sensor browser, scan via QR code tanpa install APK |
 | Backend processing | **Python 3.11+**, `paho-mqtt`, `python-dotenv` | Sesuai contoh dosen (PocketGuard), mudah untuk logic Haversine/RMS/decision table |
-| Dashboard | **Next.js 14 (App Router) + TypeScript + Tailwind CSS** | Komponen reusable, mudah bikin UI "gokil" (peta live, visualizer, command center), AI agent lebih familiar generate kode Next.js terstruktur dibanding HTML statis panjang |
+| Dashboard (Command Center) | **Next.js 14 (App Router) + TypeScript + Tailwind CSS** di rute utama `/` | Komponen reusable, mudah bikin UI "gokil" (peta live CartoDB, visualizer, command center, simulator demo) |
+| Cloud Hosting Web | **Vercel** (Single All-in-One Deployment) | Menyediakan domain HTTPS gratis otomatis, akses via QR code, mencegah pemblokiran sensor di Android & iOS |
 | Peta | `react-leaflet` + CartoDB Dark Matter tile | Dark mode map, ringan, gratis |
 | Grafik histori | `recharts` | Native React, gampang di-style dark mode |
-| MQTT di browser (dashboard) | `mqtt` (npm package, MQTT over WebSocket) | Standar untuk MQTT dari browser |
-| Broker | HiveMQ publik — `broker.hivemq.com` (8883 TLS untuk edge, 8884 WSS untuk dashboard) | Gratis, tanpa akun, dipakai di contoh dosen |
+| MQTT di browser | `mqtt` (npm package, MQTT over WebSocket/WSS port 8884) | Standar untuk komunikasi real-time dari browser HP dan dashboard laptop |
+| Broker | HiveMQ publik — `broker.hivemq.com` (8883 TLS untuk server backend, 8884 WSS untuk web browser dashboard & edge) | Gratis, tanpa akun, dipakai di contoh dosen |
 
-> Catatan: Edge device TETAP web app biasa (bukan Next.js) karena harus dibuka langsung sebagai 1 file statis di HP tanpa build step, supaya cepat di-debug saat demo. Next.js dipakai khusus untuk **dashboard**, karena dashboard dibuka di laptop dan butuh dev server (`next dev`) yang mudah di-run.
+> Catatan Arsitektur: Dashboard (`/`), HP Anak (`/anak`), dan HP Ortu (`/ortu`) disatukan dalam satu proyek Next.js App Router (dapat di-deploy ke Vercel atau dijalankan secara lokal). HP anak dan HP ortu cukup mengakses rute masing-masing via domain HTTPS untuk izin mikrofon & GPS tanpa hambatan browser HTTP. Implementasi file HTML/JS statis tetap disediakan di `edge/` sebagai fallback mandiri.
 
 ## 5. Struktur Repo (Monorepo)
 
 ```
-rantauguard/
+isDugem/
 ├── README.md
 ├── .gitignore
 ├── .env.example                    # referensi semua env var lintas modul
 ├── docs/
-│   ├── prd.md                      # dokumen ini
+│   ├── prd.md                      # dokumen PRD v2.1
 │   ├── mqtt-schema.md              # kontrak payload MQTT (Bagian 7)
 │   └── demo-script.md              # skenario demo untuk presentasi
-├── edge/
+├── edge/                           # Implementasi standalone fallback (HTML/JS statis)
 │   ├── anak/
 │   │   ├── index.html
 │   │   ├── app.js
@@ -85,40 +86,45 @@ rantauguard/
 │       ├── test_haversine.py
 │       ├── test_audio_rms.py
 │       └── test_decision_engine.py
-└── dashboard/                      # Next.js app (Anggota 3)
+└── dashboard/                      # Next.js 14 App (Hosting Vercel - Anggota 1 & 3)
     ├── package.json
     ├── tsconfig.json
     ├── tailwind.config.ts
     ├── .env.local.example
     ├── app/
     │   ├── layout.tsx
-    │   ├── page.tsx                 # halaman utama dashboard
-    │   └── globals.css
+    │   ├── globals.css
+    │   ├── page.tsx                # Rute Utama: Dashboard Laptop Ortu (Anggota 3)
+    │   ├── anak/
+    │   │   └── page.tsx            # Rute HP Anak: Sensor GPS, Audio dB, Accel (Anggota 1)
+    │   └── ortu/
+    │       └── page.tsx            # Rute HP Ortu: Shake-to-Ping & Remote (Anggota 1)
     ├── components/
-    │   ├── MapPanel.tsx             # peta dark-mode + geofence
-    │   ├── AudioVisualizer.tsx      # equalizer live
-    │   ├── StatusCard.tsx           # status klasifikasi besar
-    │   ├── CommandCenter.tsx        # tombol alarm/pengingat/ping
-    │   ├── DemoPresetPanel.tsx      # simulasi jam & lokasi
-    │   └── HistoryChart.tsx         # grafik jarak & dB
+    │   ├── MapPanel.tsx            # peta dark-mode + geofence
+    │   ├── AudioVisualizer.tsx     # equalizer live
+    │   ├── StatusCard.tsx          # status klasifikasi besar
+    │   ├── CommandCenter.tsx       # tombol alarm/pengingat/ping
+    │   ├── DemoPresetPanel.tsx     # simulasi jam & lokasi
+    │   └── HistoryChart.tsx        # grafik jarak & dB
     ├── hooks/
-    │   ├── useMqtt.ts               # koneksi MQTT WebSocket + subscribe
-    │   └── useTelemetryStore.ts     # state telemetry terkini + histori
+    │   ├── useMqtt.ts              # koneksi MQTT WebSocket + subscribe
+    │   └── useTelemetryStore.ts    # state telemetry terkini + histori
     ├── lib/
-    │   ├── mqttTopics.ts            # konstanta topic (Bagian 7)
-    │   └── types.ts                 # TypeScript types kontrak data
+    │   ├── mqttTopics.ts           # konstanta topic (Bagian 7)
+    │   ├── types.ts                # TypeScript types kontrak data
+    │   └── mockData.ts             # data dummy untuk pengujian lokal
     └── public/
 ```
 
-## 6. Standar Repo & Branching (WAJIB — karena kerja paralel 3 orang)
+## 6. Standar Repo & Branching (WAJIB - karena kerja paralel 3 orang)
 
 ### 6.1 Branch Strategy
-- `main` — selalu stabil, hanya menerima merge dari `develop` setelah semua modul tergabung dan teruji.
-- `develop` — branch integrasi, tempat semua fitur digabung sebelum ke `main`.
+- `main` - selalu stabil, hanya menerima merge dari `develop` setelah semua modul tergabung dan teruji.
+- `develop` - branch integrasi, tempat semua fitur digabung sebelum ke `main`.
 - Branch kerja per orang, prefix sesuai modul:
-  - `edge/anak-<deskripsi-singkat>` — Anggota 1
-  - `server/<deskripsi-singkat>` — Anggota 2
-  - `dashboard/<deskripsi-singkat>` — Anggota 3
+  - `edge/anak-<deskripsi-singkat>` - Anggota 1
+  - `server/<deskripsi-singkat>` - Anggota 2
+  - `dashboard/<deskripsi-singkat>` - Anggota 3
 
   Contoh: `edge/anak-gps-mic-capture`, `server/decision-engine`, `dashboard/map-panel`.
 
@@ -135,7 +141,7 @@ Tipe yang dipakai: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`.
 ### 6.3 Aturan Pull Request / Merge
 1. Setiap orang kerja di branch sendiri, push rutin (minimal 1x per hari kerja).
 2. Sebelum merge ke `develop`: pastikan modul sendiri jalan standalone (edge bisa publish ke broker test, server bisa proses data dummy, dashboard bisa render dengan data mock).
-3. Merge ke `develop` lewat Pull Request — **1 reviewer dari anggota lain** wajib approve (saling cek, bukan hanya self-merge), fokus review:
+3. Merge ke `develop` lewat Pull Request - **1 reviewer dari anggota lain** wajib approve (saling cek, bukan hanya self-merge), fokus review:
    - Nama topic MQTT & struktur payload **sama persis** dengan Bagian 7.
    - Tidak ada `.env`/credential ter-commit (cek `.gitignore`).
 4. Urutan integrasi disarankan: `server` → `edge` → `dashboard`, karena dashboard butuh data riil dari server untuk testing akhir. Tapi dalam masa pengembangan, semua bisa jalan paralel memakai **mock data** (lihat Bagian 9).
@@ -143,8 +149,8 @@ Tipe yang dipakai: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`.
 
 ### 6.4 File Wajib per Modul
 Setiap folder modul (`edge/anak`, `edge/ortu`, `server`, `dashboard`) wajib punya:
-- `.env.example` — daftar env var yang dibutuhkan (tanpa value asli).
-- Tidak ada hardcoded `PROJECT_ID`, broker URL, atau kredensial di kode — semua lewat env var / config.
+- `.env.example` - daftar env var yang dibutuhkan (tanpa value asli).
+- Tidak ada hardcoded `PROJECT_ID`, broker URL, atau kredensial di kode - semua lewat env var / config.
 
 ### 6.5 Konvensi Penamaan
 - Nama variabel/fungsi: `camelCase` di JS/TS, `snake_case` di Python.
@@ -153,7 +159,7 @@ Setiap folder modul (`edge/anak`, `edge/ortu`, `server`, `dashboard`) wajib puny
 
 ---
 
-## 7. Kontrak Data — MQTT Topic & Payload (SUMBER KEBENARAN TUNGGAL)
+## 7. Kontrak Data - MQTT Topic & Payload (SUMBER KEBENARAN TUNGGAL)
 
 **Broker:** `broker.hivemq.com`
 **Port edge/server:** `8883` (MQTT over TLS)
@@ -178,8 +184,8 @@ Setiap folder modul (`edge/anak`, `edge/ortu`, `server`, `dashboard`) wajib puny
   "sequence": 42,
   "sent_at_ms": 1790000000000,
   "location": {
-    "lat": -6.9929,
-    "lon": 110.4203,
+    "lat": -7.0502,
+    "lon": 110.4398,
     "accuracy_m": 8.5
   },
   "audio": {
@@ -198,7 +204,7 @@ Setiap folder modul (`edge/anak`, `edge/ortu`, `server`, `dashboard`) wajib puny
   "device_id": "ortu",
   "sequence": 17,
   "sent_at_ms": 1790000000000,
-  "location": { "lat": -6.9950, "lon": 110.4210 },
+  "location": { "lat": -7.0540, "lon": 110.4380 },
   "motion": {
     "accel_magnitude": 9.8,
     "shake_detected": false
@@ -229,34 +235,53 @@ Setiap folder modul (`edge/anak`, `edge/ortu`, `server`, `dashboard`) wajib puny
 ```
 
 ### 7.6 Titik Referensi (Geofence POI)
-Didefinisikan sebagai konstanta yang dipakai server & dashboard (harus identik):
+Didefinisikan sebagai konstanta yang dipakai server & dashboard (harus identik - area UNDIP Tembalang & Semarang Bawah / Kota Lama):
 ```json
 {
   "kampus": { "lat": -7.0502, "lon": 110.4398, "radius_m": 150 },
   "masjid": { "lat": -7.0552, "lon": 110.4370, "radius_m": 100 },
-  "kos":    { "lat": -7.0632, "lon": 110.4385, "radius_m": 750 },
-  "bar":    { "lat": -6.966984, "lon": 110.429807, "radius_m": 250 }
+  "kos": {
+    "lat": -7.0632,
+    "lon": 110.4385,
+    "radius_m": 750,
+    "sub_points": [
+      { "name": "Kos Mulawarman", "lat": -7.067588, "lon": 110.439708 },
+      { "name": "Kos Gondang", "lat": -7.062817, "lon": 110.440401 },
+      { "name": "Kos Banjarsari", "lat": -7.059141, "lon": 110.435523 }
+    ]
+  },
+  "bar": {
+    "lat": -6.966984,
+    "lon": 110.429807,
+    "radius_m": 250,
+    "sub_points": [
+      { "name": "RedHare Semarang", "lat": -6.976429, "lon": 110.412950 },
+      { "name": "Marabunta Kota Lama", "lat": -6.966445, "lon": 110.430036 },
+      { "name": "Golden Tiger Semarang", "lat": -6.966984, "lon": 110.429807 },
+      { "name": "HW Tiger Club Semarang", "lat": -6.965717, "lon": 110.429464 }
+    ]
+  }
 }
 ```
-(Nilai koordinat contoh — ganti dengan titik nyata di sekitar lokasi demo/kampus kelompok.)
+(Nilai koordinat telah diverifikasi via Google Maps pada area nyata UNDIP Tembalang dan Kota Lama Semarang).
 
 ---
 
 ## 8. Spesifikasi Modul (untuk AI coding agent)
 
 ### 8.1 Edge Anak (`edge/anak/app.js`)
-**Tanggung jawab:** baca GPS (Geolocation API, `watchPosition`), baca mikrofon (Web Audio API `AnalyserNode` → hitung RMS), baca accelerometer (`DeviceMotionEvent`), publish ke MQTT setiap 2–3 detik, subscribe ke `alerts` dan `command/*` untuk tampilkan notifikasi/alarm (pakai `navigator.vibrate` + tampilan on-screen).
+**Tanggung jawab:** baca GPS (Geolocation API, `watchPosition`), baca mikrofon (Web Audio API `AnalyserNode` → hitung RMS), baca accelerometer (`DeviceMotionEvent`), publish ke MQTT setiap 2-3 detik, subscribe ke `alerts` dan `command/*` untuk tampilkan notifikasi/alarm (pakai `navigator.vibrate` + tampilan on-screen).
 
 Fungsi kunci yang harus ada:
 - `getGpsReading(): Promise<{lat, lon, accuracy_m}>`
 - `computeAudioDb(analyserNode): number` → hitung RMS dari time-domain data, konversi ke dB sesuai formula Bagian 8.3.
-- `publishTelemetry(mqttClient, payload)` — payload sesuai skema 7.2.
-- `onMessage(topic, payload)` — handle `alerts`/`command/*`, tampilkan UI + vibrate.
+- `publishTelemetry(mqttClient, payload)` - payload sesuai skema 7.2.
+- `onMessage(topic, payload)` - handle `alerts`/`command/*`, tampilkan UI + vibrate.
 
 ### 8.2 Edge Ortu (`edge/ortu/app.js`)
 Sama seperti Edge Anak tapi: tidak perlu mikrofon; deteksi *shake* dari `DeviceMotionEvent` (threshold akselerasi > nilai tertentu dalam waktu singkat) → publish ke `command/ping`. UI punya tombol manual untuk alarm/pengingat/ping (redundan dengan dashboard, untuk demo tanpa laptop).
 
-### 8.3 Formula Processing (dipakai di Edge & Server — HARUS identik hasilnya)
+### 8.3 Formula Processing (dipakai di Edge & Server - HARUS identik hasilnya)
 
 **Haversine (`server/processing/haversine.py`):**
 ```python
@@ -302,9 +327,9 @@ def classify(ctx: Context) -> str:
 | jam_malam | ≤50m kos | <55 | `ISTIRAHAT_DI_KOS` |
 | jam_malam | ≤100m bar | >75 | `CRITICAL_TERDETEKSI_DI_BAR` |
 | jam_malam | ≤50m kos (claimed_at_kos=true) | >80 | `ANOMALY_FAKE_GPS` |
-| lainnya | — | — | `NORMAL` |
+| lainnya | - | - | `NORMAL` |
 
-Urutan evaluasi: cek `ANOMALY_FAKE_GPS` lebih dulu sebelum `ISTIRAHAT_DI_KOS` (karena keduanya sama-sama "≤50m kos" tapi beda threshold dB — anomaly harus menang jika dB tinggi).
+Urutan evaluasi: cek `ANOMALY_FAKE_GPS` lebih dulu sebelum `ISTIRAHAT_DI_KOS` (karena keduanya sama-sama "≤50m kos" tapi beda threshold dB - anomaly harus menang jika dB tinggi).
 
 ### 8.6 Server Main Loop (`server/main.py`)
 Pseudocode:
@@ -322,25 +347,25 @@ Pseudocode:
              publish ke topic alerts (payload sesuai 7.4)
 ```
 
-### 8.7 Dashboard — Breakdown Komponen Next.js
+### 8.7 Dashboard - Breakdown Komponen Next.js
 
-**`hooks/useMqtt.ts`** — buka koneksi `mqtt.connect(wss://broker.hivemq.com:8884/mqtt)`, subscribe ke `edge/+/telemetry` dan `alerts`, expose `latestTelemetry`, `latestAlert`, `publishCommand(topic, payload)`.
+**`hooks/useMqtt.ts`** - buka koneksi `mqtt.connect(wss://broker.hivemq.com:8884/mqtt)`, subscribe ke `edge/+/telemetry` dan `alerts`, expose `latestTelemetry`, `latestAlert`, `publishCommand(topic, payload)`.
 
-**`hooks/useTelemetryStore.ts`** — simpan histori telemetry (array terbatas, misal 60 data terakhir) untuk dipakai `HistoryChart`.
+**`hooks/useTelemetryStore.ts`** - simpan histori telemetry (array terbatas, misal 60 data terakhir) untuk dipakai `HistoryChart`.
 
-**`components/MapPanel.tsx`** — `react-leaflet` dengan tile CartoDB dark, marker posisi anak (update live dari `useMqtt`), circle geofence untuk tiap POI di Bagian 7.6 dengan warna: masjid hijau, kampus & kos biru/cyan, bar merah.
+**`components/MapPanel.tsx`** - `react-leaflet` dengan tile CartoDB dark, marker posisi anak (update live dari `useMqtt`), circle geofence untuk tiap POI di Bagian 7.6 dengan warna: masjid hijau, kampus & kos biru/cyan, bar merah.
 
-**`components/AudioVisualizer.tsx`** — bar animasi berdasarkan `db` terbaru, dengan label kategori (`Hening < 55`, `Normal 55–75`, `Bising > 75`).
+**`components/AudioVisualizer.tsx`** - bar animasi berdasarkan `db` terbaru, dengan label kategori (`Hening < 55`, `Normal 55-75`, `Bising > 75`).
 
-**`components/StatusCard.tsx`** — tampilkan `status` dari alert terbaru, warna background berbeda per status (merah untuk CRITICAL/ANOMALY, kuning WARNING/ALERT, hijau NORMAL/AMAN).
+**`components/StatusCard.tsx`** - tampilkan `status` dari alert terbaru, warna background berbeda per status (merah untuk CRITICAL/ANOMALY, kuning WARNING/ALERT, hijau NORMAL/AMAN).
 
-**`components/CommandCenter.tsx`** — 3 tombol yang publish ke `command/alarm`, `command/reminder`, `command/ping`.
+**`components/CommandCenter.tsx`** - 3 tombol yang publish ke `command/alarm`, `command/reminder`, `command/ping`.
 
-**`components/DemoPresetPanel.tsx`** — dropdown/tombol preset jam (`09:00 Kuliah`, `12:00 Dzuhur`, `23:30 Malam`) + tombol pindah titik simulasi lokasi (kampus/masjid/kos/bar), yang saat ditekan mem-publish telemetry palsu langsung ke broker (untuk testing tanpa HP fisik / sebagai cadangan demo).
+**`components/DemoPresetPanel.tsx`** - dropdown/tombol preset jam (`09:00 Kuliah`, `12:00 Dzuhur`, `23:30 Malam`) + tombol pindah titik simulasi lokasi (kampus/masjid/kos/bar), yang saat ditekan mem-publish telemetry palsu langsung ke broker (untuk testing tanpa HP fisik / sebagai cadangan demo).
 
-**`components/HistoryChart.tsx`** — `recharts` line chart: jarak ke POI terdekat & dB, dari `useTelemetryStore`.
+**`components/HistoryChart.tsx`** - `recharts` line chart: jarak ke POI terdekat & dB, dari `useTelemetryStore`.
 
-**`lib/types.ts`** — definisikan TypeScript interface persis sesuai skema JSON Bagian 7.2–7.5, contoh:
+**`lib/types.ts`** - definisikan TypeScript interface persis sesuai skema JSON Bagian 7.2-7.5, contoh:
 ```typescript
 export interface AnakTelemetry {
   device_id: "anak";
@@ -373,20 +398,20 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 ## 10. Pembagian Tugas (3 Orang)
 
 ### 👤 Anggota 1 — Edge Device Lead
-- Folder: `edge/anak/`, `edge/ortu/`. Branch prefix: `edge/`.
+- Folder: `dashboard/app/anak/`, `dashboard/app/ortu/` (dan fallback `edge/`). Branch prefix: `edge/`.
 - Implementasi Geolocation API, Web Audio API (RMS→dB di sisi client untuk validasi), DeviceMotion untuk shake detection.
 - Publish/subscribe MQTT sesuai kontrak Bagian 7.2/7.3/7.5.
 - UI minimal di HP: status koneksi, notifikasi alert masuk, tombol manual darurat.
 
-### 👤 Anggota 2 — Backend Processing & Algoritma Lead
+### 👤 Anggota 2 - Backend Processing & Algoritma Lead
 - Folder: `server/`. Branch prefix: `server/`.
-- Implementasi `haversine.py`, `audio_rms.py`, `decision_engine.py`, `mqtt_client.py`, `main.py` sesuai Bagian 8.3–8.6.
+- Implementasi `haversine.py`, `audio_rms.py`, `decision_engine.py`, `mqtt_client.py`, `main.py` sesuai Bagian 8.3-8.6.
 - Unit test untuk tiap fungsi processing (`server/tests/`).
-- Jaga konsistensi skema payload — review PR dari edge & dashboard untuk hal ini.
+- Jaga konsistensi skema payload - review PR dari edge & dashboard untuk hal ini.
 
 ### 👤 Anggota 3 — **Dashboard Lead (fokus "gokil", Next.js)**
-- Folder: `dashboard/`. Branch prefix: `dashboard/`.
-- Setup project Next.js + Tailwind + react-leaflet + recharts + mqtt.
+- Folder: `dashboard/app/page.tsx` & `dashboard/components/`. Branch prefix: `dashboard/`.
+- Setup project Next.js + Tailwind + react-leaflet + recharts + mqtt (Hosting Vercel).
 - Bangun semua komponen di Bagian 8.7, styling dark theme, animasi smooth.
 - Buat `DemoPresetPanel` jadi senjata utama saat presentasi (bisa jalan tanpa HP fisik).
 
@@ -396,10 +421,10 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 
 | Hari | Target |
 |---|---|
-| 1 | Setup repo + branching, isi `docs/mqtt-schema.md`, setup broker & `.env.example`, inisialisasi Next.js project |
+| 1 | Setup repo + branching, isi `docs/mqtt-schema.md`, setup broker & `.env.example`, inisialisasi Next.js project + opsi deploy Vercel |
 | 2–3 | Edge publish telemetry dummy → Server subscribe & proses (Haversine, dB) jalan dengan mock |
 | 3–4 | Decision engine lengkap + unit test lulus; Dashboard komponen utama (Map, StatusCard) render dengan mock data |
-| 4–5 | Integrasi nyata: Edge asli → Server → Dashboard (ganti mock jadi data live) |
+| 4–5 | Integrasi nyata: Edge asli via web HP / Vercel → Server → Dashboard (ganti mock jadi data live) |
 | 6 | DemoPresetPanel, Command Center, testing semua skenario di Bagian 12, merge `develop` → `main` |
 | 7 | Rekam video demo, susun PPT, finalisasi README |
 
@@ -412,7 +437,7 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 - [ ] Shake-to-ping dari HP ortu memicu respons di HP anak
 - [ ] Dashboard Next.js menampilkan peta, visualizer, status live tanpa delay signifikan
 - [ ] DemoPresetPanel bisa mensimulasikan seluruh skenario tanpa jalan kaki fisik
-- [ ] Semua perangkat terhubung satu jaringan saat demo
+- [ ] Semua perangkat terhubung via broker publik HiveMQ (baik melalui domain HTTPS Vercel maupun jaringan lokal saat demo)
 - [ ] `develop` sudah di-merge ke `main`, tidak ada konflik tersisa
 
 ## 13. Risiko & Mitigasi
@@ -423,7 +448,7 @@ Sebelum integrasi, setiap modul dites independen dengan data palsu:
 | Mikrofon HP beda sensitivitas antar perangkat | Kalibrasi threshold dB saat testing H-4/H-5 |
 | Broker publik down/delay saat presentasi | Siapkan broker cadangan (EMQX) di `.env`, tes H-5 |
 | Konflik merge antar branch (skema payload beda) | Kontrak Bagian 7 adalah sumber kebenaran tunggal — review PR wajib cek ini |
-| iPhone browser restriksi Web Audio/Geolocation | Pastikan dibuka via HTTPS (bukan HTTP), minta izin eksplisit, fallback mock di demo |
+| iPhone/Android browser restriksi Web Audio/Geolocation | Buka via HTTPS resmi (deployment Vercel atau tunnel HTTPS) agar peramban smartphone mengizinkan akses sensor; fallback menggunakan DemoPresetPanel langsung di peramban laptop |
 
 ## 14. Deliverables
 
