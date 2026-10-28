@@ -241,7 +241,7 @@ export default function MapPanel({
             <button
               key={spot.id}
               onClick={() => {
-                setAutoFollow(false);
+                setAutoFollow(true);
                 setCameraTarget({
                   lat: spot.lat,
                   lon: spot.lon,

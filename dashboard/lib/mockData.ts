@@ -218,8 +218,10 @@ export function getSimulatedTimestampMs(
   const month = parts.find((p) => p.type === "month")?.value || String(now.getUTCMonth() + 1).padStart(2, "0");
   const day = parts.find((p) => p.type === "day")?.value || String(now.getUTCDate()).padStart(2, "0");
 
-  const ss = Math.min(59, Math.max(0, seqOffset % 60));
-  const isoStr = `${year}-${month}-${day}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}+07:00`;
-  const parsed = new Date(isoStr).getTime();
-  return isNaN(parsed) ? Date.now() : parsed;
+  const baseIsoStr = `${year}-${month}-${day}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00+07:00`;
+  const baseMs = new Date(baseIsoStr).getTime();
+  if (isNaN(baseMs)) return Date.now();
+
+  const monotonicOffsetMs = (Date.now() % 240000) + (seqOffset % 100);
+  return baseMs + monotonicOffsetMs;
 }

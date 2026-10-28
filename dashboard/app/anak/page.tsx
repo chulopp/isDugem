@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useMqtt } from "@/hooks/useMqtt";
 import { MQTT_TOPICS, POI_SPOTS } from "@/lib/mqttTopics";
-import { AnakTelemetry, CommandPayload, TimeMode } from "@/lib/types";
+import { AnakTelemetry, TimeMode } from "@/lib/types";
 import { getSimulatedTimestampMs } from "@/lib/mockData";
 
 function playAlertTone(isAlarm: boolean) {
@@ -48,6 +48,14 @@ function playAlertTone(isAlarm: boolean) {
   }
 }
 
+function getAudioZone(db: number): number {
+  if (db < 55.0) return 0;
+  if (db < 65.0) return 1;
+  if (db <= 75.0) return 2;
+  if (db <= 80.0) return 3;
+  return 4;
+}
+
 export default function AnakEdgePage() {
   const [sensorActive, setSensorActive] = useState(false);
   const [sequence, setSequence] = useState(0);
@@ -79,12 +87,25 @@ export default function AnakEdgePage() {
     lat: -7.0502,
     lon: 110.4398,
     accuracy_m: 8.0,
+    realLat: -7.0502,
+    realLon: 110.4398,
+    realAcc: 8.0,
     rms: 0.012,
     db: 48.0,
     accel: 9.8,
-    seq: 0,
+    seq: Math.floor(Date.now() / 200),
+    localCount: 0,
+    lockedSpotId: "gps_asli",
     timeMode: "auto" as TimeMode,
+    peakDb: 48.0,
+    peakHoldUntilMs: 0,
+    presetDbLockUntilMs: 0,
   });
+
+  const lastPublishMsRef = useRef<number>(0);
+  const lastPublishedDbRef = useRef<number>(48.0);
+  const lastPublishedZoneRef = useRef<number>(getAudioZone(48.0));
+  const publishTelemetryNowRef = useRef<() => void>(() => {});
 
   const watchIdRef = useRef<number | null>(null);
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -94,23 +115,63 @@ export default function AnakEdgePage() {
   const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
 
   const { isConnected, publishRaw } = useMqtt({
+    onAnakTelemetry: (payload) => {
+      if (payload.sequence && payload.sequence > stateRef.current.seq) {
+        stateRef.current.seq = payload.sequence;
+      }
+    },
     onCommand: (topic, payload: any) => {
       const cmdType = topic.split("/").pop()?.toUpperCase() || "";
 
-      // Sinkronisasi Mode Waktu dari Dashboard
-      if (cmdType === "TIMEMODE" || payload.mode) {
-        const newMode = (payload.mode || "auto") as TimeMode;
-        stateRef.current.timeMode = newMode;
-        setSimulatedTimeMode(newMode);
-        const modeLabelMap: Record<TimeMode, string> = {
-          auto: "Otomatis (Jam Asli)",
-          jam_kuliah: "Simulasi Jam Kuliah (09:00 WIB)",
-          waktu_sholat: "Simulasi Waktu Sholat (12:15 WIB)",
-          jam_malam: "Simulasi Jam Malam (23:00 WIB)",
-          lainnya: "Simulasi Jam Normal (16:00 WIB)",
-        };
-        setTimeSyncNotice(`Waktu disinkronkan dari Dashboard: ${modeLabelMap[newMode] || newMode}`);
-        setTimeout(() => setTimeSyncNotice(null), 4000);
+      // Sinkronisasi Mode Waktu & Lokasi dari Dashboard
+      if (cmdType === "TIMEMODE" || payload.mode || payload.spot_id) {
+        if (payload.triggered_by === "anak") return;
+
+        const notices: string[] = [];
+
+        if (payload.mode) {
+          const newMode = payload.mode as TimeMode;
+          stateRef.current.timeMode = newMode;
+          setSimulatedTimeMode(newMode);
+          const modeLabelMap: Record<TimeMode, string> = {
+            auto: "Otomatis (Jam Asli)",
+            jam_kuliah: "Simulasi Jam Kuliah (09:00 WIB)",
+            waktu_sholat: "Simulasi Waktu Sholat (12:15 WIB)",
+            jam_malam: "Simulasi Jam Malam (23:00 WIB)",
+            lainnya: "Simulasi Jam Normal (16:00 WIB)",
+          };
+          notices.push(modeLabelMap[newMode] || newMode);
+        }
+
+        if (payload.spot_id) {
+          const spot = POI_SPOTS.find((s) => s.id === payload.spot_id);
+          if (spot) {
+            stateRef.current.lockedSpotId = spot.id;
+            stateRef.current.lat = spot.lat;
+            stateRef.current.lon = spot.lon;
+            stateRef.current.accuracy_m = 5.0;
+            setLockedSpotId(spot.id);
+            setGpsCoords({ lat: spot.lat, lon: spot.lon, accuracy_m: 5.0 });
+            notices.push(`Lokasi: ${spot.name}`);
+          }
+        }
+
+        if (typeof payload.db === "number") {
+          const targetDb = Number(payload.db.toFixed(1));
+          const targetRms = Number(Math.pow(10, (targetDb - 100) / 20).toFixed(6));
+          stateRef.current.db = targetDb;
+          stateRef.current.rms = targetRms;
+          stateRef.current.peakDb = targetDb;
+          stateRef.current.presetDbLockUntilMs = Date.now() + 4000;
+          setAudioData({ rms: targetRms, db: targetDb });
+        }
+
+        if (notices.length > 0) {
+          setTimeSyncNotice(`Disinkronkan dari Dashboard: ${notices.join(" | ")}`);
+          setTimeout(() => setTimeSyncNotice(null), 4000);
+        }
+
+        publishTelemetryNowRef.current();
         return;
       }
 
@@ -132,18 +193,62 @@ export default function AnakEdgePage() {
     },
   });
 
-  // Update koordinat saat mode kunci lokasi dipilih
-  useEffect(() => {
-    if (lockedSpotId !== "gps_asli") {
-      const spot = POI_SPOTS.find((s) => s.id === lockedSpotId);
-      if (spot) {
-        setGpsCoords({ lat: spot.lat, lon: spot.lon, accuracy_m: 5.0 });
-        stateRef.current.lat = spot.lat;
-        stateRef.current.lon = spot.lon;
+  const publishTelemetryNow = useCallback(() => {
+    if (stateRef.current.lockedSpotId !== "gps_asli") {
+      const lockedSpot = POI_SPOTS.find(
+        (s) => s.id === stateRef.current.lockedSpotId
+      );
+      if (lockedSpot) {
+        stateRef.current.lat = lockedSpot.lat;
+        stateRef.current.lon = lockedSpot.lon;
         stateRef.current.accuracy_m = 5.0;
       }
     }
-  }, [lockedSpotId]);
+
+    const nextSeq = Math.max(
+      stateRef.current.seq + 1,
+      Math.floor(Date.now() / 200)
+    );
+    stateRef.current.seq = nextSeq;
+    stateRef.current.localCount += 1;
+    setSequence(stateRef.current.localCount);
+
+    let sentAtMs = Date.now();
+    if (stateRef.current.timeMode !== "auto") {
+      sentAtMs = getSimulatedTimestampMs(stateRef.current.timeMode, nextSeq);
+    }
+
+    const consistentRms = Number(
+      Math.pow(10, (stateRef.current.db - 100) / 20).toFixed(6)
+    );
+
+    const payload: AnakTelemetry = {
+      device_id: "anak",
+      sequence: nextSeq,
+      sent_at_ms: sentAtMs,
+      location: {
+        lat: stateRef.current.lat,
+        lon: stateRef.current.lon,
+        accuracy_m: stateRef.current.accuracy_m,
+      },
+      audio: {
+        rms: consistentRms,
+        db: stateRef.current.db,
+      },
+      motion: {
+        accel_magnitude: stateRef.current.accel,
+      },
+    };
+
+    lastPublishMsRef.current = Date.now();
+    lastPublishedDbRef.current = stateRef.current.db;
+    lastPublishedZoneRef.current = getAudioZone(stateRef.current.db);
+    publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
+  }, [publishRaw]);
+
+  useEffect(() => {
+    publishTelemetryNowRef.current = publishTelemetryNow;
+  }, [publishTelemetryNow]);
 
   const stopSensors = useCallback(() => {
     if (watchIdRef.current !== null && "geolocation" in navigator) {
@@ -176,14 +281,18 @@ export default function AnakEdgePage() {
   const startSensors = async () => {
     setSensorActive(true);
 
-    // 1. Geolocation API
+    // 1. Geolocation API (Memakai stateRef.current.lockedSpotId agar tidak terkena stale closure)
     if ("geolocation" in navigator) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
-          if (lockedSpotId === "gps_asli") {
-            const lat = Number(pos.coords.latitude.toFixed(6));
-            const lon = Number(pos.coords.longitude.toFixed(6));
-            const acc = Number((pos.coords.accuracy || 8).toFixed(1));
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lon = Number(pos.coords.longitude.toFixed(6));
+          const acc = Number((pos.coords.accuracy || 8).toFixed(1));
+          stateRef.current.realLat = lat;
+          stateRef.current.realLon = lon;
+          stateRef.current.realAcc = acc;
+
+          if (stateRef.current.lockedSpotId === "gps_asli") {
             stateRef.current.lat = lat;
             stateRef.current.lon = lon;
             stateRef.current.accuracy_m = acc;
@@ -193,11 +302,11 @@ export default function AnakEdgePage() {
         () => {
           // Gunakan koordinat terakhir jika gagal izin GPS
         },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
       );
     }
 
-    // 2. Web Audio API (Mikrofon Asli)
+    // 2. Web Audio API (Mikrofon Asli dengan Peak Hold & Instant Trigger)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
@@ -220,16 +329,49 @@ export default function AnakEdgePage() {
           sumSq += dataArr[i] * dataArr[i];
         }
         const rmsVal = Math.sqrt(sumSq / dataArr.length);
-        let dbVal = 0;
+        let rawDb = 0;
         if (rmsVal > 0) {
-          dbVal = Math.max(0, Math.min(120, 20 * Math.log10(rmsVal) + 100));
+          rawDb = Math.max(0, Math.min(120, 20 * Math.log10(rmsVal) + 100));
         }
-        const roundedRms = Number(rmsVal.toFixed(4));
-        const roundedDb = Number(dbVal.toFixed(1));
-        stateRef.current.rms = roundedRms;
-        stateRef.current.db = roundedDb;
-        setAudioData({ rms: roundedRms, db: roundedDb });
-      }, 250);
+
+        const nowMs = Date.now();
+
+        if (
+          nowMs < stateRef.current.presetDbLockUntilMs &&
+          rawDb < stateRef.current.db
+        ) {
+          return;
+        }
+
+        if (
+          rawDb >= stateRef.current.peakDb ||
+          nowMs >= stateRef.current.peakHoldUntilMs
+        ) {
+          stateRef.current.peakDb = rawDb;
+          if (rawDb > 65.0) {
+            stateRef.current.peakHoldUntilMs = nowMs + 900;
+          }
+        }
+
+        const effectiveDb = Number(
+          Math.max(rawDb, stateRef.current.peakDb).toFixed(1)
+        );
+        const effectiveRms = Number(
+          Math.pow(10, (effectiveDb - 100) / 20).toFixed(6)
+        );
+
+        stateRef.current.rms = effectiveRms;
+        stateRef.current.db = effectiveDb;
+        setAudioData({ rms: effectiveRms, db: effectiveDb });
+
+        const currentZone = getAudioZone(effectiveDb);
+        const zoneChanged = currentZone !== lastPublishedZoneRef.current;
+        const dbJump = Math.abs(effectiveDb - lastPublishedDbRef.current) >= 6.0;
+
+        if ((zoneChanged || dbJump) && nowMs - lastPublishMsRef.current >= 250) {
+          publishTelemetryNowRef.current();
+        }
+      }, 200);
     } catch {
       // Fallback jika mikrofon ditolak
     }
@@ -267,50 +409,57 @@ export default function AnakEdgePage() {
       window.addEventListener("devicemotion", onMotion);
     }
 
-    // 4. Interval Pengiriman Telemetri MQTT (Tiap 2.5 detik)
+    publishTelemetryNow();
+
+    // 4. Interval Pengiriman Telemetri MQTT Real-Time (Tiap 1 detik)
     pubIntervalRef.current = setInterval(() => {
-      stateRef.current.seq += 1;
-      setSequence(stateRef.current.seq);
-
-      let sentAtMs = Date.now();
-      if (stateRef.current.timeMode !== "auto") {
-        sentAtMs = getSimulatedTimestampMs(
-          stateRef.current.timeMode,
-          stateRef.current.seq
-        );
-      }
-
-      const payload: AnakTelemetry = {
-        device_id: "anak",
-        sequence: stateRef.current.seq,
-        sent_at_ms: sentAtMs,
-        location: {
-          lat: stateRef.current.lat,
-          lon: stateRef.current.lon,
-          accuracy_m: stateRef.current.accuracy_m,
-        },
-        audio: {
-          rms: stateRef.current.rms,
-          db: stateRef.current.db,
-        },
-        motion: {
-          accel_magnitude: stateRef.current.accel,
-        },
-      };
-
-      publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
-    }, 2500);
+      publishTelemetryNowRef.current();
+    }, 1000);
   };
 
   useEffect(() => {
     return () => stopSensors();
   }, [stopSensors]);
 
+  const handleSelectLocationLock = (spotId: string) => {
+    stateRef.current.lockedSpotId = spotId;
+    setLockedSpotId(spotId);
+
+    if (spotId === "gps_asli") {
+      stateRef.current.lat = stateRef.current.realLat;
+      stateRef.current.lon = stateRef.current.realLon;
+      stateRef.current.accuracy_m = stateRef.current.realAcc;
+      setGpsCoords({
+        lat: stateRef.current.realLat,
+        lon: stateRef.current.realLon,
+        accuracy_m: stateRef.current.realAcc,
+      });
+    } else {
+      const spot = POI_SPOTS.find((s) => s.id === spotId);
+      if (spot) {
+        stateRef.current.lat = spot.lat;
+        stateRef.current.lon = spot.lon;
+        stateRef.current.accuracy_m = 5.0;
+        setGpsCoords({ lat: spot.lat, lon: spot.lon, accuracy_m: 5.0 });
+      }
+    }
+
+    publishTelemetryNow();
+    publishRaw(MQTT_TOPICS.COMMAND_TIMEMODE, {
+      spot_id: spotId,
+      mode: stateRef.current.timeMode,
+      triggered_by: "anak",
+      timestamp_ms: Date.now(),
+    });
+  };
+
   const handleSelectTimeMode = (mode: TimeMode) => {
     stateRef.current.timeMode = mode;
     setSimulatedTimeMode(mode);
+    publishTelemetryNow();
     publishRaw(MQTT_TOPICS.COMMAND_TIMEMODE, {
       mode,
+      spot_id: stateRef.current.lockedSpotId,
       triggered_by: "anak",
       timestamp_ms: Date.now(),
     });
@@ -350,7 +499,7 @@ export default function AnakEdgePage() {
           </span>
         </div>
 
-        {/* Banner Sinkronisasi Waktu dari Dashboard */}
+        {/* Banner Sinkronisasi dari Dashboard */}
         {timeSyncNotice && (
           <div className="p-3 rounded-2xl bg-sky-50 border border-sky-200 text-sky-900 text-xs font-semibold flex items-center gap-2">
             <Clock className="w-4 h-4 text-sky-600 shrink-0" />
@@ -470,7 +619,7 @@ export default function AnakEdgePage() {
 
           <div className="grid grid-cols-1 gap-1.5">
             <button
-              onClick={() => setLockedSpotId("gps_asli")}
+              onClick={() => handleSelectLocationLock("gps_asli")}
               className={`px-3.5 py-2.5 rounded-xl text-xs font-semibold text-left flex items-center justify-between border transition-all ${
                 lockedSpotId === "gps_asli"
                   ? "bg-slate-900 text-white border-slate-900"
@@ -486,7 +635,7 @@ export default function AnakEdgePage() {
               return (
                 <button
                   key={spot.id}
-                  onClick={() => setLockedSpotId(spot.id)}
+                  onClick={() => handleSelectLocationLock(spot.id)}
                   className={`px-3.5 py-2 rounded-xl text-xs font-semibold text-left flex items-center justify-between border transition-all ${
                     isSelected
                       ? "bg-slate-900 text-white border-slate-900"

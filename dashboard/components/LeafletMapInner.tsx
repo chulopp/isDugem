@@ -73,15 +73,18 @@ function MapCameraController({
   }, [cameraTarget, map]);
 
   useEffect(() => {
-    if (autoFollow) {
-      const [prevLat, prevLon] = prevTargetCoordRef.current;
-      const distDelta =
-        Math.abs(prevLat - targetLat) + Math.abs(prevLon - targetLon);
+    const [prevLat, prevLon] = prevTargetCoordRef.current;
+    const distDelta =
+      Math.abs(prevLat - targetLat) + Math.abs(prevLon - targetLon);
 
-      if (distDelta > 0.00003) {
-        prevTargetCoordRef.current = [targetLat, targetLon];
-        map.panTo([targetLat, targetLon], { animate: true, duration: 0.55 });
-      }
+    if (distDelta > 0.002) {
+      prevTargetCoordRef.current = [targetLat, targetLon];
+      map.flyTo([targetLat, targetLon], Math.max(map.getZoom(), 15), {
+        duration: 0.75,
+      });
+    } else if (autoFollow && distDelta > 0.00003) {
+      prevTargetCoordRef.current = [targetLat, targetLon];
+      map.panTo([targetLat, targetLon], { animate: true, duration: 0.55 });
     }
   }, [targetLat, targetLon, autoFollow, map]);
 

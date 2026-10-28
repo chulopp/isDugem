@@ -11,7 +11,7 @@ import SystemControlPanel from "@/components/SystemControlPanel";
 import QrConnectModal from "@/components/QrConnectModal";
 import { useTelemetryStore } from "@/hooks/useTelemetryStore";
 import { useMqtt } from "@/hooks/useMqtt";
-import { MQTT_TOPICS, haversineDistanceM } from "@/lib/mqttTopics";
+import { MQTT_TOPICS, POI_SPOTS, haversineDistanceM } from "@/lib/mqttTopics";
 import { fetchOsrmStreetRoute, getSimulatedTimestampMs } from "@/lib/mockData";
 import {
   AnakTelemetry,
@@ -90,7 +90,7 @@ export default function DashboardPage() {
 
   const tripTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isTripRunningRef = useRef(false);
-  const seqRef = useRef<number>(Math.floor(Date.now() / 1000));
+  const seqRef = useRef<number>(Math.floor(Date.now() / 200));
 
   useEffect(() => {
     const updateClock = () => {
@@ -150,16 +150,27 @@ export default function DashboardPage() {
     },
     onCommand: (topic, payload: any) => {
       const cmdName = topic.split("/").pop()?.toUpperCase() || "COMMAND";
-      if (cmdName === "TIMEMODE" && payload.mode) {
-        updateTimeMode(payload.mode);
-        addEventLog({
-          sender: payload.triggered_by === "anak" ? "Perangkat Anak" : "Sistem",
-          role: payload.triggered_by === "anak" ? "anak" : "dashboard",
-          title: "Sinkronisasi Mode Waktu",
-          message: `Mode waktu diatur ke ${payload.mode}`,
-          severity: "info",
-          meta: "MQTT Command",
-        });
+      if (cmdName === "TIMEMODE") {
+        if (payload.mode) {
+          updateTimeMode(payload.mode);
+        }
+        const spotName = payload.spot_id
+          ? POI_SPOTS.find((s) => s.id === payload.spot_id)?.name || payload.spot_id
+          : null;
+        const msgParts: string[] = [];
+        if (payload.mode) msgParts.push(`waktu: ${payload.mode}`);
+        if (spotName) msgParts.push(`lokasi: ${spotName}`);
+
+        if (msgParts.length > 0) {
+          addEventLog({
+            sender: payload.triggered_by === "anak" ? "Perangkat Anak" : "Sistem",
+            role: payload.triggered_by === "anak" ? "anak" : "dashboard",
+            title: "Sinkronisasi Demo",
+            message: `Mode diatur ke ${msgParts.join(", ")}`,
+            severity: "info",
+            meta: "MQTT Sync",
+          });
+        }
         return;
       }
 
@@ -199,16 +210,32 @@ export default function DashboardPage() {
       setActivePresetId(preset.id);
       clearTrail([preset.lat, preset.lon]);
 
-      seqRef.current += 1;
-      const rms = Number(Math.pow(10, (preset.db - 100) / 20).toFixed(4));
+      const nextSeq = Math.max(seqRef.current + 1, Math.floor(Date.now() / 200));
+      seqRef.current = nextSeq;
+      const rms = Number(Math.pow(10, (preset.db - 100) / 20).toFixed(6));
       const simulatedSentAtMs = getSimulatedTimestampMs(
         preset.time_display || preset.time_label,
-        seqRef.current
+        nextSeq
       );
+
+      const matchedSpot = POI_SPOTS.find(
+        (s) =>
+          Math.abs(s.lat - preset.lat) < 0.0005 &&
+          Math.abs(s.lon - preset.lon) < 0.0005
+      );
+
+      // Sinkronkan lokasi dan waktu ke HP Anak
+      publishRaw(MQTT_TOPICS.COMMAND_TIMEMODE, {
+        mode: preset.time_label,
+        spot_id: matchedSpot?.id,
+        db: preset.db,
+        triggered_by: "dashboard",
+        timestamp_ms: Date.now(),
+      });
 
       const payload: AnakTelemetry = {
         device_id: "anak",
-        sequence: seqRef.current,
+        sequence: nextSeq,
         sent_at_ms: simulatedSentAtMs,
         location: {
           lat: preset.lat,
@@ -271,15 +298,22 @@ export default function DashboardPage() {
           ? "waktu_sholat"
           : "jam_kuliah";
 
-      seqRef.current += 1;
-      const rms = Number(Math.pow(10, (defaultDb - 100) / 20).toFixed(4));
-      const simulatedSentAtMs = getSimulatedTimestampMs(
-        defaultTime,
-        seqRef.current
-      );
+      const nextSeq = Math.max(seqRef.current + 1, Math.floor(Date.now() / 200));
+      seqRef.current = nextSeq;
+      const rms = Number(Math.pow(10, (defaultDb - 100) / 20).toFixed(6));
+      const simulatedSentAtMs = getSimulatedTimestampMs(defaultTime, nextSeq);
+
+      // Sinkronkan lokasi dan waktu ke HP Anak
+      publishRaw(MQTT_TOPICS.COMMAND_TIMEMODE, {
+        mode: defaultTime,
+        spot_id: spot.id,
+        triggered_by: "dashboard",
+        timestamp_ms: Date.now(),
+      });
+
       const payload: AnakTelemetry = {
         device_id: "anak",
-        sequence: seqRef.current,
+        sequence: nextSeq,
         sent_at_ms: simulatedSentAtMs,
         location: {
           lat: spot.lat,
@@ -356,15 +390,16 @@ export default function DashboardPage() {
           ? route.targetDb
           : 54.0 + Math.sin(idx * 0.6) * 4.5;
 
-        seqRef.current += 1;
-        const rms = Number(Math.pow(10, (currentDb - 100) / 20).toFixed(4));
+        const nextSeq = Math.max(seqRef.current + 1, Math.floor(Date.now() / 200));
+        seqRef.current = nextSeq;
+        const rms = Number(Math.pow(10, (currentDb - 100) / 20).toFixed(6));
         const simulatedSentAtMs = getSimulatedTimestampMs(
           route.time_label,
-          seqRef.current
+          nextSeq
         );
         const payload: AnakTelemetry = {
           device_id: "anak",
-          sequence: seqRef.current,
+          sequence: nextSeq,
           sent_at_ms: simulatedSentAtMs,
           location: {
             lat: Number(lat.toFixed(6)),
@@ -469,7 +504,6 @@ export default function DashboardPage() {
     timeSimulationOptions.find((opt) => opt.id === timeMode) ||
     timeSimulationOptions[0];
 
-
   return (
     <div className="min-h-screen bg-[#ECEFF4] p-0 lg:p-4 flex items-stretch justify-center">
       {/* Container Utama 3 Kolom */}
@@ -569,6 +603,26 @@ export default function DashboardPage() {
                               triggered_by: "dashboard",
                               timestamp_ms: Date.now(),
                             });
+
+                            // Kirim ulang telemetri terakhir dengan jam baru agar server langsung mengevaluasi
+                            if (latestTelemetry.sent_at_ms > 0) {
+                              const nextSeq = Math.max(
+                                seqRef.current + 1,
+                                Math.floor(Date.now() / 200)
+                              );
+                              seqRef.current = nextSeq;
+                              const newSentAtMs =
+                                opt.id === "auto"
+                                  ? Date.now()
+                                  : getSimulatedTimestampMs(opt.id, nextSeq);
+                              const updatedPayload: AnakTelemetry = {
+                                ...latestTelemetry,
+                                sequence: nextSeq,
+                                sent_at_ms: newSentAtMs,
+                              };
+                              publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, updatedPayload);
+                            }
+
                             setIsTimeDropdownOpen(false);
                           }}
                           className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-all ${
