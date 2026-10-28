@@ -223,8 +223,8 @@ Proyek **isDugem** dikembangkan oleh:
 | Nama Lengkap | NIM | Peran & Tanggung Jawab Kontribusi |
 |---|---|---|
 | **Fallah Iqbal Kurnianto** | `24060125130065` | **Pengembang Dashboard**<br>Arsitektur UI/UX Dashboard Next.js, integrasi peta Leaflet, visualisasi data audio & grafik riwayat, panel kontrol simulasi preset, dan tata kelola deployment Vercel. |
-| **Raditya Arganta Anantio** | `24060125120021` | **Pengembang Edge Device**<br>Pengembangan modul web sensor HP Anak (Web Audio API desibel, Geolocation API, akselerometer), modul remote HP Orang Tua (Shake-to-Ping), dan optimasi latensi telemetri. |
-| **Wendi Adi Ardiansah** | `24060125120027` | **Pengembang Backend & Algoritma**<br>Perancangan Server Decision Engine Python, implementasi formula jarak Haversine, konversi RMS desibel, pengujian unit Pytest (169 skenario), dan arsitektur topik MQTT. |
+| **Raditya Arganta Anantio** | `24060125120021` | **Pengembang Backend & Algoritma**<br>Perancangan Server Decision Engine Python, implementasi formula jarak Haversine, konversi RMS desibel, pengujian unit Pytest (169 skenario), dan arsitektur topik MQTT. |
+| **Wendi Adi Ardiansah** | `24060125120027` | **Pengembang Edge Device**<br>Pengembangan modul web sensor HP Anak (Web Audio API desibel, Geolocation API, akselerometer), modul remote HP Orang Tua (Shake-to-Ping), dan optimasi latensi telemetri. |
 
 ---
 
