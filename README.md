@@ -169,6 +169,21 @@ Seluruh antarmuka web sistem isDugem telah di-deploy secara publik menggunakan p
    cd server
    python main.py
    ```
+   > 💡 **Catatan Eksekusi Server (Lingkungan Python):**
+   > - **Eksekusi Langsung:** Server dapat langsung dijalankan dengan perintah `python main.py` tanpa mewajibkan virtual environment (`venv`), asalkan pustaka pendukung (`paho-mqtt` dan `python-dotenv`) sudah terpasang di Python komputer Anda.
+   > - **Instalasi pada Komputer Baru (Opsional):** Jika dijalankan pada komputer penguji atau laptop lain yang belum memiliki dependensi, jalankan:
+   >   ```bash
+   >   pip install -r requirements.txt
+   >   ```
+   > - **Penggunaan Virtual Environment (Opsional):** Penggunaan `venv` bersifat opsional (praktik terbaik jika ingin mengisolasi dependensi agar tidak bercampur dengan proyek Python lain):
+   >   ```bash
+   >   python -m venv venv
+   >   # Windows:
+   >   .\venv\Scripts\activate
+   >   # Linux/Mac:
+   >   source venv/bin/activate
+   >   pip install -r requirements.txt
+   >   ```
 2. **Buka Aplikasi pada 2 Ponsel dan 1 Laptop:**
    - Buka `/anak` pada HP pertama (klik **Mulai Sensor & Telemetri**).
    - Buka `/ortu` pada HP kedua (klik **Aktifkan Sensor Shake-to-Ping**).
