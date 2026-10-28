@@ -148,9 +148,22 @@ export default function DashboardPage() {
     onAlert: (payload) => {
       ingestServerAlert(payload);
     },
-    onCommand: (topic, payload) => {
+    onCommand: (topic, payload: any) => {
+      const cmdName = topic.split("/").pop()?.toUpperCase() || "COMMAND";
+      if (cmdName === "TIMEMODE" && payload.mode) {
+        updateTimeMode(payload.mode);
+        addEventLog({
+          sender: payload.triggered_by === "anak" ? "Perangkat Anak" : "Sistem",
+          role: payload.triggered_by === "anak" ? "anak" : "dashboard",
+          title: "Sinkronisasi Mode Waktu",
+          message: `Mode waktu diatur ke ${payload.mode}`,
+          severity: "info",
+          meta: "MQTT Command",
+        });
+        return;
+      }
+
       if (payload.triggered_by === "ortu") {
-        const cmdName = topic.split("/").pop()?.toUpperCase() || "COMMAND";
         addEventLog({
           sender: "Perangkat Orang Tua",
           role: "ortu",
@@ -513,7 +526,7 @@ export default function DashboardPage() {
                 <span>{dateDisplay}</span>
                 {clockDisplay && (
                   <span className="font-mono text-slate-900 border-l border-slate-200 pl-2">
-                    {clockDisplay} WIB
+                    {timeMode === "auto" ? `${clockDisplay} WIB` : currentOption.badge}
                   </span>
                 )}
               </div>
@@ -551,6 +564,11 @@ export default function DashboardPage() {
                           type="button"
                           onClick={() => {
                             updateTimeMode(opt.id);
+                            publishRaw(MQTT_TOPICS.COMMAND_TIMEMODE, {
+                              mode: opt.id,
+                              triggered_by: "dashboard",
+                              timestamp_ms: Date.now(),
+                            });
                             setIsTimeDropdownOpen(false);
                           }}
                           className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-all ${

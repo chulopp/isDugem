@@ -14,6 +14,7 @@ export const MQTT_TOPICS = {
   COMMAND_PING: `rantauguard/${PROJECT_ID}/command/ping`,
   COMMAND_ALARM: `rantauguard/${PROJECT_ID}/command/alarm`,
   COMMAND_REMINDER: `rantauguard/${PROJECT_ID}/command/reminder`,
+  COMMAND_TIMEMODE: `rantauguard/${PROJECT_ID}/command/timemode`,
   ALL_COMMANDS: `rantauguard/${PROJECT_ID}/command/+`,
 } as const;
 

@@ -9,10 +9,12 @@ import {
   Play,
   Square,
   BellRing,
+  Clock,
 } from "lucide-react";
 import { useMqtt } from "@/hooks/useMqtt";
 import { MQTT_TOPICS, POI_SPOTS } from "@/lib/mqttTopics";
-import { AnakTelemetry, CommandPayload } from "@/lib/types";
+import { AnakTelemetry, CommandPayload, TimeMode } from "@/lib/types";
+import { getSimulatedTimestampMs } from "@/lib/mockData";
 
 function playAlertTone(isAlarm: boolean) {
   try {
@@ -62,6 +64,10 @@ export default function AnakEdgePage() {
   // Mode Kunci Koordinat Demo ("gps_asli" atau id dari POI_SPOTS)
   const [lockedSpotId, setLockedSpotId] = useState<string>("gps_asli");
 
+  // Mode Waktu Simulasi ("auto" atau id jadwal)
+  const [simulatedTimeMode, setSimulatedTimeMode] = useState<TimeMode>("auto");
+  const [timeSyncNotice, setTimeSyncNotice] = useState<string | null>(null);
+
   // Peringatan/Perintah Masuk
   const [incomingCommand, setIncomingCommand] = useState<{
     type: string;
@@ -77,6 +83,7 @@ export default function AnakEdgePage() {
     db: 48.0,
     accel: 9.8,
     seq: 0,
+    timeMode: "auto" as TimeMode,
   });
 
   const watchIdRef = useRef<number | null>(null);
@@ -87,8 +94,26 @@ export default function AnakEdgePage() {
   const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
 
   const { isConnected, publishRaw } = useMqtt({
-    onCommand: (topic, payload: CommandPayload) => {
-      const cmdType = topic.split("/").pop()?.toUpperCase() || "PING";
+    onCommand: (topic, payload: any) => {
+      const cmdType = topic.split("/").pop()?.toUpperCase() || "";
+
+      // Sinkronisasi Mode Waktu dari Dashboard
+      if (cmdType === "TIMEMODE" || payload.mode) {
+        const newMode = (payload.mode || "auto") as TimeMode;
+        stateRef.current.timeMode = newMode;
+        setSimulatedTimeMode(newMode);
+        const modeLabelMap: Record<TimeMode, string> = {
+          auto: "Otomatis (Jam Asli)",
+          jam_kuliah: "Simulasi Jam Kuliah (09:00 WIB)",
+          waktu_sholat: "Simulasi Waktu Sholat (12:15 WIB)",
+          jam_malam: "Simulasi Jam Malam (23:00 WIB)",
+          lainnya: "Simulasi Jam Normal (16:00 WIB)",
+        };
+        setTimeSyncNotice(`Waktu disinkronkan dari Dashboard: ${modeLabelMap[newMode] || newMode}`);
+        setTimeout(() => setTimeSyncNotice(null), 4000);
+        return;
+      }
+
       if (typeof navigator !== "undefined" && "vibrate" in navigator) {
         navigator.vibrate(
           cmdType === "ALARM" ? [500, 200, 500, 200, 500] : [200, 100, 200]
@@ -96,8 +121,8 @@ export default function AnakEdgePage() {
       }
       playAlertTone(cmdType === "ALARM");
       setIncomingCommand({
-        type: cmdType,
-        message: payload.message,
+        type: cmdType || "PING",
+        message: payload.message || "Perintah masuk",
         time: new Date().toLocaleTimeString("id-ID", {
           hour: "2-digit",
           minute: "2-digit",
@@ -247,10 +272,18 @@ export default function AnakEdgePage() {
       stateRef.current.seq += 1;
       setSequence(stateRef.current.seq);
 
+      let sentAtMs = Date.now();
+      if (stateRef.current.timeMode !== "auto") {
+        sentAtMs = getSimulatedTimestampMs(
+          stateRef.current.timeMode,
+          stateRef.current.seq
+        );
+      }
+
       const payload: AnakTelemetry = {
         device_id: "anak",
         sequence: stateRef.current.seq,
-        sent_at_ms: Date.now(),
+        sent_at_ms: sentAtMs,
         location: {
           lat: stateRef.current.lat,
           lon: stateRef.current.lon,
@@ -272,6 +305,16 @@ export default function AnakEdgePage() {
   useEffect(() => {
     return () => stopSensors();
   }, [stopSensors]);
+
+  const handleSelectTimeMode = (mode: TimeMode) => {
+    stateRef.current.timeMode = mode;
+    setSimulatedTimeMode(mode);
+    publishRaw(MQTT_TOPICS.COMMAND_TIMEMODE, {
+      mode,
+      triggered_by: "anak",
+      timestamp_ms: Date.now(),
+    });
+  };
 
   const dbPercent = Math.min(100, Math.max(5, Math.round(audioData.db)));
 
@@ -306,6 +349,14 @@ export default function AnakEdgePage() {
             {isConnected ? "Terhubung" : "Menunggu"}
           </span>
         </div>
+
+        {/* Banner Sinkronisasi Waktu dari Dashboard */}
+        {timeSyncNotice && (
+          <div className="p-3 rounded-2xl bg-sky-50 border border-sky-200 text-sky-900 text-xs font-semibold flex items-center gap-2">
+            <Clock className="w-4 h-4 text-sky-600 shrink-0" />
+            <span className="flex-1">{timeSyncNotice}</span>
+          </div>
+        )}
 
         {/* Popup Peringatan Masuk */}
         {incomingCommand && (
@@ -444,6 +495,45 @@ export default function AnakEdgePage() {
                 >
                   <span>Kunci di {spot.name}</span>
                   <span className="text-[10px] opacity-75">{spot.area}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 4. Kartu Kunci Waktu Demo */}
+        <div className="p-5 rounded-3xl bg-slate-50/90 border border-slate-200/80 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Kunci Waktu Demo</span>
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-semibold">
+              {simulatedTimeMode === "auto" ? "Jam Asli" : simulatedTimeMode}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-1.5">
+            {[
+              { id: "auto", label: "Otomatis (Ikuti Jam Asli HP)", badge: "Real-time" },
+              { id: "jam_kuliah", label: "Simulasi Jam Kuliah", badge: "09:00 WIB" },
+              { id: "waktu_sholat", label: "Simulasi Waktu Sholat", badge: "12:15 WIB" },
+              { id: "jam_malam", label: "Simulasi Jam Malam", badge: "23:00 WIB" },
+              { id: "lainnya", label: "Simulasi Jam Normal", badge: "16:00 WIB" },
+            ].map((opt) => {
+              const isSelected = simulatedTimeMode === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => handleSelectTimeMode(opt.id as TimeMode)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold text-left flex items-center justify-between border transition-all ${
+                    isSelected
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-700 border-slate-200/80 hover:bg-slate-100"
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                  <span className="text-[10px] font-mono opacity-80">{opt.badge}</span>
                 </button>
               );
             })}
