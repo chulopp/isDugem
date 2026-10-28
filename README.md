@@ -1,285 +1,234 @@
-# 🛡️ RantauGuard (isDugem)
-### Smart Student & Parental Guardian System - IoT Multicommunication 2 Arah & Multisensor
+<p align="center">
+  <img src="logo.png" alt="isDugem Logo" width="180" />
+</p>
 
-[![Status](https://img.shields.io/badge/Status-Active%20Development-blue.svg)](#)
-[![Python Tests](https://img.shields.io/badge/Python%20Tests-155%20Passed-brightgreen.svg)](#)
-[![Dashboard Tests](https://img.shields.io/badge/Dashboard%20Tests-4%20Passed-brightgreen.svg)](#)
-[![Stack](https://img.shields.io/badge/Stack-Python%20%7C%20Next.js%20%7C%20Web%20Sensors%20%7C%20MQTT-orange.svg)](#)
+<h1 align="center">isDugem</h1>
 
-RantauGuard adalah sistem IoT pemantau mahasiswa rantau terintegrasi dengan validasi **multisensor** (GPS + Mikrofon Suasana Sekitar + Akselerometer) dan **komunikasi dua arah** berbasis protokol MQTT. Sistem ini mampu mendeteksi manipulasi lokasi (*Fake GPS*) melalui verifikasi silang antara koordinat klaim dengan intensitas kebisingan suara ruangan.
+<p align="center">
+  <b>IoT Smart Student Guardian & Parental Monitoring System</b><br>
+  <i>Sistem Pemantauan Cerdas Mahasiswa Rantau Berbasis IoT Multisensor dan Komunikasi Dua Arah</i>
+</p>
 
----
-
-## 📌 Daftar Isi
-1. [Arsitektur & Alur Sistem](#-arsitektur--alur-sistem)
-2. [Pembagian Tugas Tim (3 Orang)](#-pembagian-tugas-tim-3-orang)
-3. [Alur Kerja Git & Kolaborasi Tim (Wajib Dipatuhi)](#-alur-kerja-git--kolaborasi-tim-wajib-dipatuhi)
-4. [Struktur Folder Monorepo](#-struktur-folder-monorepo)
-5. [Panduan Menjalankan Modul (Quickstart)](#-panduan-menjalankan-modul-quickstart)
-6. [Kontrak Komunikasi & Broker MQTT](#-kontrak-komunikasi--broker-mqtt)
-7. [Checklist Skenario Demo](#-checklist-skenario-demo)
+<p align="center">
+  <a href="#"><img src="https://img.shields.io/badge/Status-Production%20Ready-emerald.svg" alt="Status" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/Python%20Tests-169%20Passed-brightgreen.svg" alt="Python Tests" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/Deployment-Vercel%20HTTPS-blue.svg" alt="Deployment" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/Protocol-MQTT%20HiveMQ-orange.svg" alt="Protocol" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/Framework-Next.js%2014-black.svg" alt="Framework" /></a>
+</p>
 
 ---
 
-## 🏗️ Arsitektur & Alur Sistem
+## 📌 1. Ringkasan Eksekutif & Latar Belakang
+
+Mahasiswa yang menjalani perkuliahan jauh dari keluarga (mahasiswa rantau) menghadapi berbagai tantangan kemandirian, mulai dari kedisiplinan jadwal akademik hingga potensi pengaruh pergaulan malam berisiko. Di sisi lain, orang tua memiliki keterbatasan akses untuk memantau keselamatan dan aktivitas anak secara objektif.
+
+Aplikasi pemantau lokasi konvensional memiliki kelemahan mendasar: **rentan terhadap manipulasi lokasi (*Fake GPS*)** dan tidak memiliki konteks aktivitas nyata.
+
+**isDugem** hadir sebagai solusi berbasis *Internet of Things* (IoT) yang menggabungkan:
+1. **Validasi Multisensor:** Memadukan sensor lokasi (GPS), sensor kebisingan suara sekitar (*Web Audio API* untuk membaca desibel), dan sensor gerak (*DeviceMotionEvent* / akselerometer).
+2. **Verifikasi Silang (*Cross-Verification*):** Mendeteksi indikasi *Fake GPS* ketika koordinat anak diklaim berada di kos, namun tingkat kebisingan mikrofon terdeteksi tinggi pada jam malam.
+3. **Komunikasi Dua Arah (*Bidirectional MQTT*):** Memungkinkan orang tua melakukan *remote control* darurat seperti memicu dering alarm, mengirim pengingat, atau memeriksa posisi anak melalui gestur menggoyangkan ponsel (*shake-to-ping*).
+
+---
+
+## 🌟 2. Fitur Utama Sistem
+
+- 📍 **Geofencing & Verifikasi Silang Anti-Fake GPS:**
+  Sistem mengevaluasi jarak anak terhadap titik-titik penting (Kampus UNDIP, Masjid, area kos, dan zona hiburan malam Kota Lama). Jika terdeteksi klaim lokasi di kos pada jam malam tetapi mikrofon menangkap kebisingan klub (> 80 dB), sistem otomatis menetapkan status **ANOMALI FAKE GPS**.
+
+- ⏱️ **Klasifikasi Kontekstual Berbasis Waktu:**
+  Evaluasi status berjalan dinamis mengikuti jendela waktu: Jam Kuliah (08:00 - 15:00 WIB), Waktu Sholat (Dzuhur, Ashar, Maghrib, Isya), Jam Malam (22:00 - 05:00 WIB), dan Jam Normal/Santai.
+
+- 📲 **Sensor Gerak Shake-to-Ping:**
+  Orang tua cukup menggoyangkan ponsel (*akselerasi > 18 m/s²*) untuk langsung mengirim sinyal periksa lokasi (*ping*) secara instan ke perangkat anak.
+
+- 🔔 **Kontrol Perintah Jarak Jauh (Remote Command):**
+  Orang tua dan operator dashboard dapat membunyikan sirine alarm darurat, mengirim teks pengingat belajar/ibadah, atau meminta pembaruan telemetri terkini.
+
+- 🗺️ **Peta Pelacakan Interaktif & Visualisasi Audio:**
+  Dashboard menyajikan peta pelacakan langsung (*Leaflet*), rute navigasi jalan (*OSRM integration*), indikator tingkat suara langsung (*dB level*), kecepatan gerak, dan riwayat kejadian tercatat.
+
+- ⚡ **Sinkronisasi Demo Dua Arah Real-Time:**
+  Tersedia fitur kunci koordinat demo dan kunci waktu demo di HP Anak maupun Dashboard laptop untuk mempermudah simulasi berbagai skenario pengujian tanpa jeda (*zero latency*).
+
+---
+
+## 🏗️ 3. Arsitektur Sistem & Aliran Data
+
+Sistem dirancang dengan arsitektur terdistribusi yang memisahkan antara antarmuka pengguna, pemrosesan sensor di sisi klien (*Edge*), perantara pesan terenkripsi (*Cloud Broker*), dan mesin pengambil keputusan (*Backend Decision Engine*).
 
 ```mermaid
 flowchart LR
-    subgraph VercelCloud["Vercel Cloud Deployment (HTTPS Resmi)"]
-        DASH["/ (Laptop Ortu)\nDashboard Command Center\nPeta, Visualizer, Alert, Simulator"]
-        EA["/anak (Smartphone Anak)\nSensor GPS, Audio dB, Accel"]
-        EO["/ortu (Smartphone Ortu)\nShake-to-Ping, Remote Controls"]
+    subgraph EdgeClients["Edge Clients (Smartphone PWA / HTTPS)"]
+        EA["📱 Perangkat Anak (/anak)\n- Sensor GPS Hardware\n- Web Audio API (dB Suara)\n- Sensor Gerak (Akselerometer)\n- Kunci Lokasi & Waktu Demo"]
+        EO["📱 Perangkat Ortu (/ortu)\n- Sensor Guncangan (Shake-to-Ping)\n- Tombol Remote Alarm / Ingatkan\n- Pantauan Status Anak"]
     end
 
-    subgraph CloudBroker["Broker Cloud (HiveMQ)"]
-        MQTT["broker.hivemq.com\nPort 8883 (TLS) & 8884 (WSS)"]
+    subgraph BrokerCloud["Cloud Broker MQTT"]
+        MQTT["broker.hivemq.com\nPort 8883 (MQTTS TLS)\nPort 8884 (WebSocket WSS)"]
     end
 
-    subgraph Backend["Server Processing (Python)"]
-        PROC["Data Processing:\n- Haversine Geofencing\n- Audio RMS -> dB\n- Decision Engine Classifier"]
+    subgraph BackendEngine["Backend Processing (Python 3.11)"]
+        ENGINE["Server Decision Engine\n- Haversine Distance Calculation\n- Audio RMS ke Desibel Konversi\n- Algoritma Klasifikasi Keputusan\n- Filter Anti-Out-of-Order Telemetri"]
     end
 
-    EA -->|"telemetry (GPS, dB, Accel)"| MQTT
-    EO -->|"shake-to-ping & commands"| MQTT
-    MQTT -->|"consume raw telemetry"| PROC
-    PROC -->|"publish classified alerts"| MQTT
-    MQTT -->|"alerts & status live stream"| DASH
-    MQTT -.->|"command/alarm/reminder/ping"| EA
+    subgraph CommandCenter["Web Command Center (Next.js 14)"]
+        DASH["💻 Dashboard Pemantauan (/)\n- Peta Pelacakan Leaflet Live\n- Panel Kontrol Alarm & Ping\n- Grafik Riwayat Sensor & Log Event\n- Simulator Skenario Pengujian"]
+    end
+
+    EA -->|"rantauguard/.../edge/anak/telemetry"| MQTT
+    EO -->|"rantauguard/.../edge/ortu/telemetry\ncommand/ping | alarm | reminder"| MQTT
+    MQTT -->|"Subscribe Telemetri Masuk"| ENGINE
+    ENGINE -->|"Publish Alert Terklasifikasi (Retain)"| MQTT
+    MQTT -->|"Streaming Status Live"| DASH
+    MQTT -.->|"Perintah Suara & Getar Balik"| EA
+```
+
+### Penjelasan Komponen Arsitektur:
+1. **Perangkat Anak (`/anak`):**
+   Aplikasi web mobile yang membaca sensor perangkat keras secara langsung (Geolocation, mikrofon, akselerometer) dan mempublikasikan data telemetri terstruktur setiap detik ke broker MQTT.
+2. **Perangkat Orang Tua (`/ortu`):**
+   Aplikasi web mobile untuk orang tua yang menampilkan status terkini anak dan mendeteksi gestur guncangan fisik untuk mengirim perintah *ping*.
+3. **Dashboard Pemantauan (`/`):**
+   Pusat kendali berbasis Next.js 14 yang menampilkan visualisasi data terpadu, pemetaan geografis, grafik tren kebisingan, dan panel kendali sistem.
+4. **Server Decision Engine (`server/`):**
+   Layanan Python independen yang melakukan perhitungan matematis jarak Haversine terhadap titik-titik POI, mengonversi sinyal audio RMS ke skala desibel, dan mengklasifikasikan status keamanan mahasiswa rantau.
+
+---
+
+## 📊 4. Matriks Logika Keputusan (Decision Engine Matrix)
+
+Mesin keputusan (*decision engine*) mengevaluasi status berdasarkan irisan antara waktu lokal (WIB), jarak terhadap koordinat *Point of Interest* (POI), dan tingkat intensitas kebisingan mikrofon:
+
+| Konteks Waktu | Syarat Jarak POI | Syarat Suara (dB) | Status Keputusan | Deskripsi Status |
+|---|---|---|---|---|
+| **Jam Kuliah**<br>(08:00 - 15:00 WIB) | Jarak ke Kampus <= 150 m | Suara tenang (< 65 dB) | `SEDANG_KULIAH` | Mahasiswa berada di area kampus dalam suasana kelas kondusif. |
+| **Jam Kuliah**<br>(08:00 - 15:00 WIB) | Jarak ke Kampus > 150 m | Bebas | `ALERT_BOLOS_KULIAH` | Mahasiswa berada di luar area kampus saat jam perkuliahan berlangsung. |
+| **Waktu Sholat**<br>(Jadwal Sholat Wajib) | Jarak ke Masjid > 100 m | Bebas | `WARNING_BELUM_KE_MASJID` | Pengingat waktu sholat aktif saat mahasiswa berada jauh dari masjid kampus. |
+| **Jam Malam**<br>(22:00 - 05:00 WIB) | Jarak ke Kos <= 750 m | Suara tenang (< 55 dB) | `ISTIRAHAT_DI_KOS` | Mahasiswa berada di area kos dalam keadaan tenang dan beristirahat. |
+| **Jam Malam**<br>(22:00 - 05:00 WIB) | Jarak ke Kos <= 750 m (Klaim) | Suara bising (> 80 dB) | `ANOMALY_FAKE_GPS` | Terdeteksi indikasi manipulasi lokasi: klaim GPS di kos tetapi audio menangkap kebisingan tinggi. |
+| **Jam Malam**<br>(22:00 - 05:00 WIB) | Jarak ke Bar <= 250 m | Suara bising (> 75 dB) | `CRITICAL_TERDETEKSI_DI_BAR` | Mahasiswa terdeteksi berada di lokasi hiburan malam pada jam rawan. |
+| **Semua Waktu** | Di luar kondisi batas | Sesuai kondisi | `NORMAL` | Aktivitas harian normal di luar parameter anomali risiko. |
+
+---
+
+## 📡 5. Protokol Komunikasi & Kontrak Data MQTT
+
+Seluruh komunikasi antar-entitas menggunakan standar pertukaran pesan MQTT terenkripsi melalui HiveMQ Cloud:
+- **Broker Host:** `broker.hivemq.com`
+- **Port Komunikasi:** `8883` (MQTTS over TLS untuk Python Server) dan `8884` (WSS over TLS untuk Web Dashboard/PWA).
+- **Format Pertukaran:** JSON Payload standar.
+
+### Struktur Topik MQTT:
+```
+rantauguard/{PROJECT_ID}/
+├── edge/anak/telemetry       # Paket data sensor lokasi, dB audio, akselerometer anak
+├── edge/ortu/telemetry       # Paket data status guncangan (shake) dari orang tua
+├── alerts                    # Keputusan resmi hasil evaluasi backend (retained)
+├── command/ping              # Perintah periksa lokasi anak
+├── command/alarm             # Perintah memicu sirine darurat pada HP anak
+├── command/reminder          # Perintah kirim notifikasi pengingat ke HP anak
+└── command/timemode          # Sinkronisasi simulasi waktu dan kunci lokasi demo
+```
+
+### Contoh Payload Telemetri (`edge/anak/telemetry`):
+```json
+{
+  "device_id": "anak",
+  "sequence": 14205,
+  "sent_at_ms": 1793160000000,
+  "location": {
+    "lat": -7.067588,
+    "lon": 110.439708,
+    "accuracy_m": 5.0
+  },
+  "audio": {
+    "rms": 0.0028,
+    "db": 48.9
+  },
+  "motion": {
+    "accel_magnitude": 9.8
+  }
+}
 ```
 
 ---
 
-## 🌐 Arsitektur Deployment Baru (All-in-One Vercel HTTPS)
+## 🚀 6. Akses Sistem & Panduan Demonstrasi
 
-Untuk menghindari kendala **pemblokiran izin mikrofon & GPS oleh browser smartphone (Chrome & Safari)** pada jaringan lokal non-HTTPS, seluruh modul antarmuka web disatukan dalam **1 Project Next.js di Vercel**:
+Seluruh antarmuka web sistem isDugem telah di-deploy secara publik menggunakan protokol **HTTPS resmi di Vercel** sehingga dapat langsung diakses melalui peramban laptop maupun smartphone:
 
-- **Domain Vercel:** `https://isdugem.vercel.app` (contoh)
-- 💻 **Laptop Ortu (Dashboard):** buka `https://isdugem.vercel.app/`
-- 📱 **HP Anak (Sensor):** buka `https://isdugem.vercel.app/anak` (scan QR Code)
-- 📱 **HP Ortu (Shake-to-Ping):** buka `https://isdugem.vercel.app/ortu` (scan QR Code)
+- 💻 **Dashboard Pemantauan (Laptop):** [https://isdugem.vercel.app](https://isdugem.vercel.app)
+- 📱 **Antarmuka Sensor HP Anak:** [https://isdugem.vercel.app/anak](https://isdugem.vercel.app/anak)
+- 📱 **Antarmuka Remote HP Orang Tua:** [https://isdugem.vercel.app/ortu](https://isdugem.vercel.app/ortu)
 
-> ✅ **Keunggulan:**
-> 1. Bebas dari kendala WiFi kampus (*tidak wajib 1 jaringan WiFi yang sama*).
-> 2. Izin GPS & Mikrofon otomatis disetujui karena menggunakan protokol **HTTPS terenkripsi resmi**.
-> 3. Desain antarmuka 100% konsisten menggunakan Tailwind CSS.
-
----
-
-## 👥 Pembagian Tugas Tim (3 Orang)
-
-Setiap anggota memiliki area tanggung jawab masing-masing untuk mencegah tabrakan kode (*merge conflict*):
-
-| Anggota | Peran | Folder Tanggung Jawab | Prefix Branch |
-|---|---|---|---|
-| **Anggota 1** | **Edge Device Lead** | `dashboard/app/anak/`, `dashboard/app/ortu/` *(fallback: `edge/`)* | `edge/*` |
-| **Anggota 2** | **Backend Processing & Algoritma Lead** | `server/` | `server/*` |
-| **Anggota 3** | **Dashboard Lead (Next.js)** | `dashboard/app/page.tsx`, `dashboard/components/` | `dashboard/*` |
-
----
-
-## 🌿 Alur Kerja Git & Kolaborasi Tim (Wajib Dipatuhi)
-
-Untuk memastikan proyek selesai rapi, terintegrasi, dan tidak ada file yang rusak menjelang deadline, ikuti aturan Git berikut:
-
-### 1. Struktur Cabang (Branching Model)
-- `main` : Cabang stabil (*production ready*). **Dilarang langsung push ke `main`**. Cabang ini hanya di-merge dari `develop` saat rilis demo final.
-- `develop` : Cabang integrasi utama. Tempat seluruh fitur tim digabungkan dan diuji bersama.
-- Cabang Fitur Pribadi : Dibuat bercabang dari `develop` dengan prefix nama modul masing-masing.
-
-### 2. Standar Nama Branch
-- Modul Edge: `edge/anak-baca-gps`, `edge/ortu-shake-detect`
-- Modul Server: `server/formula-haversine`, `server/decision-engine`
-- Modul Dashboard: `dashboard/map-leaflet`, `dashboard/command-center`
-
-### 3. Standar Pesan Commit (Conventional Commits)
-Gunakan format: `<tipe>(<modul>): <deskripsi singkat>`
-- `feat(edge-anak): tambah pembacaan mic web audio api`
-- `fix(server): perbaiki pembagian nol pada audio rms`
-- `feat(dashboard): integrasi websocket mqtt ke status card`
-- `test(server): tambah unit test untuk kondisi anomaly fake gps`
-- `docs(readme): perbarui langkah instalasi lokal`
-
----
-
-### 4. Langkah Step-by-Step Mengerjakan Fitur (Panduan untuk Teman Tim)
-
-#### Langkah 1: Clone dan Sinkronisasi Awal
-```bash
-git clone https://github.com/chulopp/isDugem.git
-cd isDugem
-
-# Pindah ke branch integrasi develop
-git checkout develop
-git pull origin develop
-```
-
-#### Langkah 2: Buat Branch Fitur Baru
-```bash
-# Contoh untuk Anggota 1 yang mengerjakan sensor anak:
-git checkout -b edge/anak-sensor-capture
-
-# Contoh untuk Anggota 2 yang mengerjakan server:
-git checkout -b server/koneksi-mqtt-processing
-```
-
-#### Langkah 3: Kerjakan Fitur & Uji Secara Mandiri
-> ⚠️ **PENTING:** Kerjakan kode **HANYA** di folder modul Anda sendiri (`edge/`, `server/`, atau `dashboard/`). Jangan mengedit file di folder modul rekan Anda kecuali telah disepakati bersama.
-
-#### Langkah 4: Commit dan Push ke GitHub
-```bash
-# Periksa file yang diubah
-git status
-
-# Tambahkan perubahan dan commit
-git add .
-git commit -m "feat(edge-anak): implementasi pengiriman payload telemetri"
-
-# Push branch fitur ke GitHub
-git push -u origin edge/anak-sensor-capture
-```
-
-#### Langkah 5: Buka Pull Request (PR) ke `develop`
-1. Buka repository di browser: [https://github.com/chulopp/isDugem](https://github.com/chulopp/isDugem)
-2. Klik tombol **"Compare & pull request"**.
-3. **PENTING:** Pastikan arah merge:
-   - `base: develop` ⬅️ `compare: branch-fitur-anda`
-   - *(JANGAN jadikan base ke `main`!)*
-4. Isi checklist pada template PR yang otomatis muncul:
-   - [x] Kontrak data MQTT cocok dengan `docs/mqtt-schema.md`
-   - [x] Tidak ada `.env` yang ter-commit
-   - [x] Sudah diuji secara mandiri
-5. Minta minimal **1 rekan kelompok** untuk melakukan *Review & Approve*.
-6. Setelah di-approve, branch dapat di-merge ke `develop`.
-
----
-
-## 📁 Struktur Folder Monorepo
-
-```
-isDugem/
-├── .github/
-│   └── PULL_REQUEST_TEMPLATE.md       # Template PR otomatis dengan checklist kontrak
-├── .gitignore                         # Mengabaikan file env, venv, cache, node_modules
-├── .env.example                       # Referensi variabel lingkungan global
-├── README.md                          # Panduan tim utama
-├── docs/
-│   ├── prd.md                         # Product Requirement Document (PRD v2)
-│   ├── mqtt-schema.md                 # KONTRAK DATA: Topik, Payload JSON, POI, Enum
-│   └── demo-script.md                 # Skenario pengujian & langkah demonstrasi kelas
-├── edge/                              # Tanggung jawab: Anggota 1
-│   ├── anak/                          # Web app sensor HP anak (GPS, Audio dB, Accel)
-│   └── ortu/                          # Web app HP ortu (Shake-to-ping & remote)
-├── server/                            # Tanggung jawab: Anggota 2
-│   ├── requirements.txt               # paho-mqtt, python-dotenv, pytest
-│   ├── config.py                      # Loader environment & koordinat POI
-│   ├── models.py                      # Dataclass Telemetry, Context, Alert
-│   ├── mqtt_client.py                 # Klien MQTT HiveMQ TLS
-│   ├── main.py                        # Server main loop (Subscribe -> Process -> Publish)
-│   ├── processing/                    # Algoritma: Haversine, Audio RMS, Decision Engine
-│   └── tests/                         # Unit tests pytest (16 tests lulus)
-└── dashboard/                         # Tanggung jawab: Anggota 3
-    ├── .env.local.example             # Konfigurasi Next.js WebSocket
-    └── README.md                      # Petunjuk setup & arsitektur UI Next.js
-```
-
----
-
-## 🚀 Panduan Menjalankan Modul (Quickstart)
-
-### 1. Modul Server Backend Python (`server/`)
-1. Masuk ke folder server dan aktifkan *virtual environment* yang sudah terpasang dependensinya:
+### Langkah Demonstrasi Pengujian Sistem (3 Menit):
+1. **Jalankan Server Keputusan di Komputer Penguji:**
    ```bash
    cd server
-
-   # Gunakan virtual environment yang sudah tersedia di proyek (.venv315):
-   source .venv315/bin/activate       # Linux/Mac
-   # atau di Windows PowerShell jika dibuat manual:
-   # .\.venv315\Scripts\Activate.ps1
-
-   # ATAU jika menyiapkan virtual environment baru dari awal:
-   # python3 -m venv .venv315 && source .venv315/bin/activate
-   # pip install -r requirements.txt
-   ```
-   > ⚠️ **Penting:** Jalankan server selalu di dalam virtual environment (`.venv315`), bukan dengan Python global sistem, karena seluruh pustaka seperti `paho-mqtt` dan `python-dotenv` terpasang di dalamnya.
-2. Jalankan pengujian unit test (verifikasi logika internal):
-   ```bash
-   pytest
-   ```
-   *(Memverifikasi seluruh 155 unit test backend lulus hijau).*
-3. Jalankan server:
-   ```bash
    python main.py
    ```
+2. **Buka Aplikasi pada 2 Ponsel dan 1 Laptop:**
+   - Buka `/anak` pada HP pertama (klik **Mulai Sensor & Telemetri**).
+   - Buka `/ortu` pada HP kedua (klik **Aktifkan Sensor Shake-to-Ping**).
+   - Buka halaman utama `/` pada laptop sebagai dashboard pemantau.
+3. **Uji Skenario Anomali Fake GPS:**
+   - Pada HP Anak, tekan **Kunci di Kos Mulawarman** dan pilih **Simulasi Jam Malam (23:00 WIB)**.
+   - Perhatikan status awal: sistem membaca kondisi tenang sebagai **ISTIRAHAT DI KOS**.
+   - Tiup atau buat suara bising di dekat mikrofon HP Anak (> 80 dB): dalam waktu kurang dari 0,3 detik, status di Dashboard dan HP Ortu langsung berubah menjadi **ANOMALI FAKE GPS**.
+4. **Uji Komunikasi Dua Arah Shake-to-Ping:**
+   - Goyangkan HP Orang Tua: sensor akselerometer mendeteksi guncangan (> 18 m/s²) dan otomatis memicu perintah *ping* ke HP Anak secara langsung.
 
 ---
 
-### 2. Modul Web App & Dashboard Next.js (`dashboard/`)
-Seluruh antarmuka web (Dashboard Laptop `/`, HP Anak `/anak`, dan HP Ortu `/ortu`) dikelola di dalam folder ini:
+## 🧪 7. Hasil Pengujian & Verifikasi Kinerja
 
-1. Masuk ke folder dashboard dan pasang dependensi:
-   ```bash
-   cd dashboard
-   cp .env.local.example .env.local
-   npm install
-   ```
-2. Jalankan server pengembang di lokal:
-   ```bash
-   npm run dev
-   ```
-   - Dashboard Laptop: [http://localhost:3000](http://localhost:3000)
-   - Web HP Anak: [http://localhost:3000/anak](http://localhost:3000/anak)
-   - Web HP Ortu: [http://localhost:3000/ortu](http://localhost:3000/ortu)
+Kualitas dan keandalan sistem telah divalidasi melalui pengujian bertingkat:
 
-   > ⚠️ **Catatan Akses Smartphone (HTTP vs HTTPS):**
-   > - Akses peramban laptop via `http://localhost:3000` diperlakukan sebagai *Secure Context*, sehingga seluruh visualisasi dan panel simulasi preset berjalan penuh.
-   > - Jika smartphone mengakses alamat IP lokal non-localhost via HTTP biasa (misal `http://192.168.x.x:3000/anak`), peramban mobile (Chrome Android/Safari iOS) akan **memblokir izin mikrofon dan GPS**.
-   > - Untuk presentasi kelas, disarankan menggunakan **Demo Preset Panel** langsung di laptop (`localhost:3000`). Jika ingin menghubungkan smartphone fisik, gunakan deployment HTTPS resmi (seperti Vercel) atau tunnel HTTPS (seperti Ngrok/Cloudflare Tunnel).
-
-3. **Deploy ke Vercel (Produksi HTTPS Gratis):**
-   - Connect repository `chulopp/isDugem` ke akun [Vercel](https://vercel.com).
-   - Set *Root Directory* ke: `dashboard`.
-   - Klik **Deploy** ➔ Dapatkan domain `https://<nama-project>.vercel.app`.
-   - HP Anak dan HP Ortu tinggal memindai QR Code dari browser smartphone masing-masing.
+- ✅ **Pengujian Unit Backend (Pytest):**
+  Sebanyak **169 skenario pengujian unit** telah dijalankan dan lulus 100%, meliputi verifikasi rumus Haversine geofence, konversi logaritma RMS audio, validasi payload JSON, toleransi out-of-order paket telemetri, serta seluruh percabangan mesin klasifikasi keputusan.
+- ✅ **Pengujian Kompilasi Frontend (Next.js Production Build):**
+  Seluruh komponen antarmuka, peta Leaflet, dan modul hooks MQTT lulus uji validasi tipe TypeScript dan kompilasi statis tanpa galat (*zero error*).
+- ✅ **Pengujian Multiperangkat Fisik Secara Nyata:**
+  Telah diuji menggunakan kombinasi laptop dan 2 smartphone fisik (iOS dan Android) yang terhubung ke jaringan seluler berbeda tanpa hambatan izin sensor berkat dukungan penuh HTTPS.
 
 ---
 
-### 3. Modul Edge Standalone Fallback (`edge/anak/` & `edge/ortu/`)
-*Tersedia sebagai cadangan file statis HTML/JS jika ingin dijalankan tanpa Next.js / saat pengujian offline.*
-1. Salin konfigurasi:
-   ```bash
-   cd edge/anak && cp config.example.js config.js
-   cd ../ortu && cp config.example.js config.js
-   ```
-2. Buka menggunakan extension **Live Server** di VS Code atau server lokal statis.
+## 🛠️ 8. Teknologi yang Digunakan (Tech Stack)
+
+### Antarmuka & Frontend
+- **Next.js 14 (App Router)** - Framework React performa tinggi untuk antarmuka web dan mobile PWA.
+- **TypeScript** - Menjamin keamanan tipe data dan keandalan kode aplikasi.
+- **Tailwind CSS** - Tata letak modern, bersih, responsif, dan konsisten di semua ukuran layar.
+- **Leaflet & React-Leaflet** - Mesin rendering peta interaktif berbasis OpenStreetMap.
+- **Lucide Icons** - Pustaka ikon grafis vektor profesional.
+
+### Backend & Pemrosesan Data
+- **Python 3.11** - Bahasa utama pemrosesan algoritma keputusan dan pemodelan matematis.
+- **Paho-MQTT** - Klien MQTT bersertifikasi untuk komunikasi jaringan IoT.
+- **Pytest** - Kerangka kerja pengujian otomatis (*automated testing*).
+
+### Jaringan & Komunikasi Data
+- **HiveMQ Cloud Broker** - Broker pesan MQTT enterprise berkinerja tinggi.
+- **MQTTS (TLS v1.3 / Port 8883)** - Protokol komunikasi terenkripsi aman untuk klien Python.
+- **WebSocket Secure (WSS / Port 8884)** - Protokol streaming telemetri real-time untuk peramban web.
 
 ---
 
-## 📡 Kontrak Komunikasi & Broker MQTT
+## 👥 9. Tim Pengembang
 
-> ⚠️ **PERHATIAN KERAS KEPADA SELURUH ANGGOTA:**
-> Jangan pernah mengubah nama field JSON atau nama topik MQTT tanpa memperbarui dokumen `docs/mqtt-schema.md`! Ketiga modul saling bergantung pada kontrak ini.
+Proyek **isDugem** dikembangkan oleh:
 
-- **Broker Publik:** `broker.hivemq.com`
-- **Port Edge & Server:** `8883` (MQTTS over TLS)
-- **Port Dashboard:** `8884` (MQTT over Secure WebSocket: `wss://broker.hivemq.com:8884/mqtt`)
-- **Prefix Topik (`PROJECT_ID`):** `isdugem_tim_01` (dapat disesuaikan di `.env`)
-
-Dokumentasi lengkap payload dapat dibaca di:
-👉 **[docs/mqtt-schema.md](docs/mqtt-schema.md)**
+| Nama Lengkap | NIM | Peran & Tanggung Jawab Kontribusi |
+|---|---|---|
+| **Fallah Iqbal Kurnianto** | `24060125130065` | **Pengembang Dashboard**<br>Arsitektur UI/UX Dashboard Next.js, integrasi peta Leaflet, visualisasi data audio & grafik riwayat, panel kontrol simulasi preset, dan tata kelola deployment Vercel. |
+| **Raditya Arganta Anantio** | `24060125120021` | **Pengembang Edge Device**<br>Pengembangan modul web sensor HP Anak (Web Audio API desibel, Geolocation API, akselerometer), modul remote HP Orang Tua (Shake-to-Ping), dan optimasi latensi telemetri. |
+| **Wendi Adi Ardiansah** | `24060125120027` | **Pengembang Backend & Algoritma**<br>Perancangan Server Decision Engine Python, implementasi formula jarak Haversine, konversi RMS desibel, pengujian unit Pytest (169 skenario), dan arsitektur topik MQTT. |
 
 ---
 
-## 🎬 Checklist Skenario Demo & Status Verifikasi
-
-Status kesiapan skenario berdasarkan hasil pengujian aktual:
-- [x] **Unit Testing Logika & Model Data:** 155 pengujian Pytest backend dan 4 pengujian Vitest dashboard lulus 100% (menguji formula Haversine, desibel audio, validasi payload, dan fusi tabel keputusan).
-- [x] **Skenario Terdeteksi di Bar (Terverifikasi End-to-End Real UI):** Terbukti secara nyata melalui klik tombol preset pada UI peramban $\rightarrow$ MQTT WSS $\rightarrow$ HiveMQ TLS $\rightarrow$ Server Backend $\rightarrow$ publikasi alert $\rightarrow$ subscriber dashboard $\rightarrow$ status `CRITICAL_TERDETEKSI_DI_BAR` tampil pada kartu dan banner visual dashboard.
-- [x] **Skenario Terverifikasi Logika & Simulasi Server:**
-  - **Skenario Normal Kuliah:** Status `SEDANG_KULIAH` aktif saat lokasi di kampus dengan audio tenang (< 65 dB).
-  - **Skenario Bolos Kuliah:** Status `ALERT_BOLOS_KULIAH` aktif saat lokasi menjauh pada jam kuliah (> 150 m).
-  - **Skenario Pengingat Sholat:** Status `WARNING_BELUM_KE_MASJID` dan tombol reminder mengirim pesan pengingat.
-  - **Skenario Anomali Fake GPS (Andalan):** Status `ANOMALY_FAKE_GPS` aktif saat koordinat berada di kos tetapi mikrofon mendeteksi suara dentuman > 80 dB.
-  - **Komunikasi 2 Arah:** Goyangkan HP Ortu (*shake*) atau tekan tombol remote memicu perintah ke topik `command/*`.
-
-Skrip lengkap pengujian dapat dibaca di:
-👉 **[docs/demo-script.md](docs/demo-script.md)**
+<p align="center">
+  <b>Departemen Ilmu Komputer / Informatika</b><br>
+  Universitas Diponegoro &bull; 2026
+</p>
