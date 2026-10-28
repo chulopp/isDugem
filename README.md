@@ -19,7 +19,7 @@
 
 ---
 
-## 📌 1. Ringkasan Eksekutif & Latar Belakang
+## 1. Ringkasan Eksekutif & Latar Belakang
 
 Mahasiswa yang menjalani perkuliahan jauh dari keluarga (mahasiswa rantau) menghadapi berbagai tantangan kemandirian, mulai dari kedisiplinan jadwal akademik hingga potensi pengaruh pergaulan malam berisiko. Di sisi lain, orang tua memiliki keterbatasan akses untuk memantau keselamatan dan aktivitas anak secara objektif.
 
@@ -32,37 +32,37 @@ Aplikasi pemantau lokasi konvensional memiliki kelemahan mendasar: **rentan terh
 
 ---
 
-## 🌟 2. Fitur Utama Sistem
+## 2. Fitur Utama Sistem
 
-- 📍 **Geofencing & Verifikasi Silang Anti-Fake GPS:**
+- **Geofencing & Verifikasi Silang Anti-Fake GPS:**
   Sistem mengevaluasi jarak anak terhadap titik-titik penting (Kampus UNDIP, Masjid, area kos, dan zona hiburan malam Kota Lama). Jika terdeteksi klaim lokasi di kos pada jam malam tetapi mikrofon menangkap kebisingan klub (> 80 dB), sistem otomatis menetapkan status **ANOMALI FAKE GPS**.
 
-- ⏱️ **Klasifikasi Kontekstual Berbasis Waktu:**
+- **Klasifikasi Kontekstual Berbasis Waktu:**
   Evaluasi status berjalan dinamis mengikuti jendela waktu: Jam Kuliah (08:00 - 15:00 WIB), Waktu Sholat (Dzuhur, Ashar, Maghrib, Isya), Jam Malam (22:00 - 05:00 WIB), dan Jam Normal/Santai.
 
-- 📲 **Sensor Gerak Shake-to-Ping:**
+- **Sensor Gerak Shake-to-Ping:**
   Orang tua cukup menggoyangkan ponsel (*akselerasi > 18 m/s²*) untuk langsung mengirim sinyal periksa lokasi (*ping*) secara instan ke perangkat anak.
 
-- 🔔 **Kontrol Perintah Jarak Jauh (Remote Command):**
+- **Kontrol Perintah Jarak Jauh (Remote Command):**
   Orang tua dan operator dashboard dapat membunyikan sirine alarm darurat, mengirim teks pengingat belajar/ibadah, atau meminta pembaruan telemetri terkini.
 
-- 🗺️ **Peta Pelacakan Interaktif & Visualisasi Audio:**
+- **Peta Pelacakan Interaktif & Visualisasi Audio:**
   Dashboard menyajikan peta pelacakan langsung (*Leaflet*), rute navigasi jalan (*OSRM integration*), indikator tingkat suara langsung (*dB level*), kecepatan gerak, dan riwayat kejadian tercatat.
 
-- ⚡ **Sinkronisasi Demo Dua Arah Real-Time:**
+- **Sinkronisasi Demo Dua Arah Real-Time:**
   Tersedia fitur kunci koordinat demo dan kunci waktu demo di HP Anak maupun Dashboard laptop untuk mempermudah simulasi berbagai skenario pengujian tanpa jeda (*zero latency*).
 
 ---
 
-## 🏗️ 3. Arsitektur Sistem & Aliran Data
+## 3. Arsitektur Sistem & Aliran Data
 
 Sistem dirancang dengan arsitektur terdistribusi yang memisahkan antara antarmuka pengguna, pemrosesan sensor di sisi klien (*Edge*), perantara pesan terenkripsi (*Cloud Broker*), dan mesin pengambil keputusan (*Backend Decision Engine*).
 
 ```mermaid
 flowchart LR
     subgraph EdgeClients["Edge Clients (Smartphone PWA / HTTPS)"]
-        EA["📱 Perangkat Anak (/anak)\n- Sensor GPS Hardware\n- Web Audio API (dB Suara)\n- Sensor Gerak (Akselerometer)\n- Kunci Lokasi & Waktu Demo"]
-        EO["📱 Perangkat Ortu (/ortu)\n- Sensor Guncangan (Shake-to-Ping)\n- Tombol Remote Alarm / Ingatkan\n- Pantauan Status Anak"]
+        EA["Perangkat Anak (/anak)\n- Sensor GPS Hardware\n- Web Audio API (dB Suara)\n- Sensor Gerak (Akselerometer)\n- Kunci Lokasi & Waktu Demo"]
+        EO["Perangkat Ortu (/ortu)\n- Sensor Guncangan (Shake-to-Ping)\n- Tombol Remote Alarm / Ingatkan\n- Pantauan Status Anak"]
     end
 
     subgraph BrokerCloud["Cloud Broker MQTT"]
@@ -74,7 +74,7 @@ flowchart LR
     end
 
     subgraph CommandCenter["Web Command Center (Next.js 14)"]
-        DASH["💻 Dashboard Pemantauan (/)\n- Peta Pelacakan Leaflet Live\n- Panel Kontrol Alarm & Ping\n- Grafik Riwayat Sensor & Log Event\n- Simulator Skenario Pengujian"]
+        DASH["Dashboard Pemantauan (/)\n- Peta Pelacakan Leaflet Live\n- Panel Kontrol Alarm & Ping\n- Grafik Riwayat Sensor & Log Event\n- Simulator Skenario Pengujian"]
     end
 
     EA -->|"rantauguard/.../edge/anak/telemetry"| MQTT
@@ -97,7 +97,7 @@ flowchart LR
 
 ---
 
-## 📊 4. Matriks Logika Keputusan (Decision Engine Matrix)
+## 4. Matriks Logika Keputusan (Decision Engine Matrix)
 
 Mesin keputusan (*decision engine*) mengevaluasi status berdasarkan irisan antara waktu lokal (WIB), jarak terhadap koordinat *Point of Interest* (POI), dan tingkat intensitas kebisingan mikrofon:
 
@@ -113,7 +113,7 @@ Mesin keputusan (*decision engine*) mengevaluasi status berdasarkan irisan antar
 
 ---
 
-## 📡 5. Protokol Komunikasi & Kontrak Data MQTT
+## 5. Protokol Komunikasi & Kontrak Data MQTT
 
 Seluruh komunikasi antar-entitas menggunakan standar pertukaran pesan MQTT terenkripsi melalui HiveMQ Cloud:
 - **Broker Host:** `broker.hivemq.com`
@@ -155,13 +155,13 @@ rantauguard/{PROJECT_ID}/
 
 ---
 
-## 🚀 6. Akses Sistem & Panduan Demonstrasi
+## 6. Akses Sistem & Panduan Demonstrasi
 
 Seluruh antarmuka web sistem isDugem telah di-deploy secara publik menggunakan protokol **HTTPS resmi di Vercel** sehingga dapat langsung diakses melalui peramban laptop maupun smartphone:
 
-- 💻 **Dashboard Pemantauan (Laptop):** [https://isdugem.vercel.app](https://isdugem.vercel.app)
-- 📱 **Antarmuka Sensor HP Anak:** [https://isdugem.vercel.app/anak](https://isdugem.vercel.app/anak)
-- 📱 **Antarmuka Remote HP Orang Tua:** [https://isdugem.vercel.app/ortu](https://isdugem.vercel.app/ortu)
+- **Dashboard Pemantauan (Laptop):** [https://isdugem.vercel.app](https://isdugem.vercel.app)
+- **Antarmuka Sensor HP Anak:** [https://isdugem.vercel.app/anak](https://isdugem.vercel.app/anak)
+- **Antarmuka Remote HP Orang Tua:** [https://isdugem.vercel.app/ortu](https://isdugem.vercel.app/ortu)
 
 ### Langkah Demonstrasi Pengujian Sistem (3 Menit):
 1. **Jalankan Server Keputusan di Komputer Penguji:**
@@ -169,7 +169,7 @@ Seluruh antarmuka web sistem isDugem telah di-deploy secara publik menggunakan p
    cd server
    python main.py
    ```
-   > 💡 **Catatan Eksekusi Server (Lingkungan Python):**
+   > **Catatan Eksekusi Server (Lingkungan Python):**
    > - **Eksekusi Langsung:** Server dapat langsung dijalankan dengan perintah `python main.py` tanpa mewajibkan virtual environment (`venv`), asalkan pustaka pendukung (`paho-mqtt` dan `python-dotenv`) sudah terpasang di Python komputer Anda.
    > - **Instalasi pada Komputer Baru (Opsional):** Jika dijalankan pada komputer penguji atau laptop lain yang belum memiliki dependensi, jalankan:
    >   ```bash
@@ -197,20 +197,20 @@ Seluruh antarmuka web sistem isDugem telah di-deploy secara publik menggunakan p
 
 ---
 
-## 🧪 7. Hasil Pengujian & Verifikasi Kinerja
+## 7. Hasil Pengujian & Verifikasi Kinerja
 
 Kualitas dan keandalan sistem telah divalidasi melalui pengujian bertingkat:
 
-- ✅ **Pengujian Unit Backend (Pytest):**
+- **Pengujian Unit Backend (Pytest):**
   Sebanyak **169 skenario pengujian unit** telah dijalankan dan lulus 100%, meliputi verifikasi rumus Haversine geofence, konversi logaritma RMS audio, validasi payload JSON, toleransi out-of-order paket telemetri, serta seluruh percabangan mesin klasifikasi keputusan.
-- ✅ **Pengujian Kompilasi Frontend (Next.js Production Build):**
+- **Pengujian Kompilasi Frontend (Next.js Production Build):**
   Seluruh komponen antarmuka, peta Leaflet, dan modul hooks MQTT lulus uji validasi tipe TypeScript dan kompilasi statis tanpa galat (*zero error*).
-- ✅ **Pengujian Multiperangkat Fisik Secara Nyata:**
+- **Pengujian Multiperangkat Fisik Secara Nyata:**
   Telah diuji menggunakan kombinasi laptop dan 2 smartphone fisik (iOS dan Android) yang terhubung ke jaringan seluler berbeda tanpa hambatan izin sensor berkat dukungan penuh HTTPS.
 
 ---
 
-## 🛠️ 8. Teknologi yang Digunakan (Tech Stack)
+## 8. Teknologi yang Digunakan (Tech Stack)
 
 ### Antarmuka & Frontend
 - **Next.js 14 (App Router)** - Framework React performa tinggi untuk antarmuka web dan mobile PWA.
@@ -231,7 +231,7 @@ Kualitas dan keandalan sistem telah divalidasi melalui pengujian bertingkat:
 
 ---
 
-## 👥 9. Tim Pengembang
+## 9. Tim Pengembang
 
 Proyek **isDugem** dikembangkan oleh:
 
