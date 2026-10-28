@@ -102,10 +102,7 @@ export default function DemoPresetPanel({
 
               {/* Tengah: Indikator Status & dB */}
               <div className="hidden sm:flex items-center gap-4 shrink-0">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 w-28">
-                  <span
-                    className={`w-2 h-2 rounded-full ${statusMeta.dotColor}`}
-                  />
+                <div className="flex items-center text-xs font-semibold text-slate-700 w-24">
                   <span className="truncate">{statusMeta.shortLabel}</span>
                 </div>
 

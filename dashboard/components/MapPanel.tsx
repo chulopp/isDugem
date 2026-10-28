@@ -79,13 +79,9 @@ export default function MapPanel({
       {/* Header Panel Peta */}
       <div className="px-5 py-3.5 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <h3 className="text-sm font-bold text-slate-900">
             Peta Pelacakan Live
           </h3>
-          <span className="text-xs text-slate-400 font-medium">
-            (Tembalang & Semarang Bawah)
-          </span>
         </div>
 
         {/* Tombol Fokus Kamera */}

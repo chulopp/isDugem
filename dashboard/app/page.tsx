@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Calendar, Clock, ChevronDown, Check } from "lucide-react";
+import { Calendar, Clock, ChevronDown, Check, Menu } from "lucide-react";
 import Sidebar, { NavTab } from "@/components/Sidebar";
 import KpiStrip from "@/components/KpiStrip";
 import MapPanel from "@/components/MapPanel";
@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<NavTab>("overview");
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
   const timeDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -423,43 +424,31 @@ export default function DashboardPage() {
     id: TimeMode;
     label: string;
     badge: string;
-    sublabel: string;
-    dotColor: string;
   }[] = [
     {
       id: "auto",
       label: "Otomatis (Ikuti Jam Asli)",
       badge: "Otomatis",
-      sublabel: `Sesuai jam server (${activeTimeDesc[activeTimeLabel]})`,
-      dotColor: "bg-emerald-500",
     },
     {
       id: "jam_kuliah",
       label: "Simulasi Jam Kuliah",
       badge: "09:00 WIB",
-      sublabel: "Aturan Geofence Kampus UNDIP",
-      dotColor: "bg-sky-500",
     },
     {
       id: "waktu_sholat",
       label: "Simulasi Waktu Sholat",
       badge: "12:15 WIB",
-      sublabel: "Aturan Geofence Masjid Kampus",
-      dotColor: "bg-emerald-600",
     },
     {
       id: "jam_malam",
       label: "Simulasi Jam Malam",
       badge: "23:00 WIB",
-      sublabel: "Aturan Geofence Bar & Kos",
-      dotColor: "bg-rose-500",
     },
     {
       id: "lainnya",
       label: "Simulasi Jam Santai / Normal",
       badge: "16:00 WIB",
-      sublabel: "Di luar jam wajib (Aman)",
-      dotColor: "bg-slate-400",
     },
   ];
 
@@ -472,7 +461,24 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[#ECEFF4] p-0 lg:p-4 flex items-stretch justify-center">
       {/* Container Utama 3 Kolom */}
       <div className="w-full max-w-[1640px] rounded-none lg:rounded-[34px] bg-white/90 backdrop-blur-2xl border border-white shadow-[0_20px_60px_-15px_rgba(15,23,42,0.08)] flex flex-col lg:flex-row overflow-hidden">
-        {/* Kolom 1: Sidebar Kiri */}
+        {/* Mobile Header Bar (Khusus Layar < lg: Minimalis Logo + Hamburger) */}
+        <div className="lg:hidden flex items-center justify-between px-5 py-3.5 bg-white/90 backdrop-blur-xl border-b border-slate-200/80 shrink-0 select-none">
+          <img
+            src="/logo.png"
+            alt="ISDUGEM?!"
+            className="h-7 w-auto object-contain"
+          />
+          <button
+            type="button"
+            onClick={() => setIsMobileDrawerOpen(true)}
+            aria-label="Buka Menu Navigasi"
+            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 flex items-center justify-center shrink-0 transition-colors"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Kolom 1: Sidebar Kiri (Desktop Aside + Mobile Drawer) */}
         <Sidebar
           activeTab={activeTab}
           onSelectTab={setActiveTab}
@@ -480,12 +486,14 @@ export default function DashboardPage() {
           isMqttConnected={isConnected}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+          isMobileOpen={isMobileDrawerOpen}
+          onCloseMobile={() => setIsMobileDrawerOpen(false)}
         />
 
         {/* Kolom 2: Area Utama Tengah */}
         <main className="flex-1 min-w-0 p-5 sm:p-7 overflow-y-auto space-y-5 bg-[#F8FAFC]/60">
           {/* Header Tengah (Dashboard Umum) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200/70">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pb-2 border-b border-slate-200/70">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
                 Dashboard Pemantauan
@@ -493,8 +501,14 @@ export default function DashboardPage() {
             </div>
 
             {/* Tanggal, Jam Real-time & Dropdown Mode Waktu Demo */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-sm">
+            <div
+              className={`flex gap-2 ${
+                isSidebarCollapsed
+                  ? "flex-col sm:flex-row sm:items-center"
+                  : "flex-col items-start sm:items-end 2xl:flex-row 2xl:items-center"
+              }`}
+            >
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-sm shrink-0">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
                 <span>{dateDisplay}</span>
                 {clockDisplay && (
@@ -505,14 +519,13 @@ export default function DashboardPage() {
               </div>
 
               {/* Solusi A: Dropdown Mode Waktu Demo */}
-              <div className="relative" ref={timeDropdownRef}>
+              <div className="relative shrink-0" ref={timeDropdownRef}>
                 <button
                   type="button"
                   onClick={() => setIsTimeDropdownOpen((prev) => !prev)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition-all"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 transition-all shrink-0"
                 >
                   <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${currentOption.dotColor}`} />
                   <span className="text-slate-800">
                     {timeMode === "auto"
                       ? `Mode: Otomatis (${activeTimeDesc[activeTimeLabel]})`
@@ -540,24 +553,22 @@ export default function DashboardPage() {
                             updateTimeMode(opt.id);
                             setIsTimeDropdownOpen(false);
                           }}
-                          className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center justify-between transition-all ${
+                          className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-all ${
                             isSelected
                               ? "bg-slate-100 font-bold text-slate-900"
                               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                           }`}
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${opt.dotColor}`} />
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-800 truncate">{opt.label}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{opt.sublabel}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <span className="font-semibold text-slate-800 truncate mr-2">
+                            {opt.label}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono font-medium">
                               {opt.badge}
                             </span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                            {isSelected && (
+                              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            )}
                           </div>
                         </button>
                       );

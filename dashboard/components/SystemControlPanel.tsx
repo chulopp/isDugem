@@ -80,9 +80,6 @@ export default function SystemControlPanel({
           </div>
 
           <h2 className="text-sm font-bold text-slate-900">Perangkat Anak</h2>
-          <p className="text-xs text-slate-500 font-mono mt-0.5">
-            ID: {telemetry.device_id} · Paket #{telemetry.sequence}
-          </p>
 
           {/* 3 Tombol Bulat Aksi Cepat */}
           <div className="flex items-center justify-center gap-3.5 mt-4">

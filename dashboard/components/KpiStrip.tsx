@@ -44,15 +44,11 @@ export default function KpiStrip({
           {/* Baris Atas: Ikon + Label (dan badge di layar monitor besar) */}
           <div className="flex items-center justify-between gap-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <div
-                className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 border ${statusInfo.badgeBg} ${statusInfo.borderColor}`}
-              >
-                {statusInfo.severity === "critical" ? (
-                  <ShieldAlert className={`w-3.5 h-3.5 ${statusInfo.badgeText}`} />
-                ) : (
-                  <ShieldCheck className={`w-3.5 h-3.5 ${statusInfo.badgeText}`} />
-                )}
-              </div>
+              {statusInfo.severity === "critical" ? (
+                <ShieldAlert className={`w-4 h-4 shrink-0 ${statusInfo.badgeText}`} />
+              ) : (
+                <ShieldCheck className={`w-4 h-4 shrink-0 ${statusInfo.badgeText}`} />
+              )}
               <p className="text-xs font-semibold text-slate-500 truncate">
                 Status Sistem
               </p>
@@ -81,9 +77,7 @@ export default function KpiStrip({
           {/* Baris Atas: Ikon + Label & Mini Equalizer */}
           <div className="flex items-center justify-between gap-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <div className="w-6 h-6 rounded-md bg-slate-100 border border-slate-200/70 flex items-center justify-center shrink-0">
-                <Volume2 className="w-3.5 h-3.5 text-slate-700" />
-              </div>
+              <Volume2 className="w-4 h-4 shrink-0 text-slate-600" />
               <p className="text-xs font-semibold text-slate-500 truncate">
                 Tingkat Suara
               </p>
@@ -122,9 +116,7 @@ export default function KpiStrip({
           {/* Baris Atas: Ikon + Label & Kecepatan */}
           <div className="flex items-center justify-between gap-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <div className="w-6 h-6 rounded-md bg-slate-100 border border-slate-200/70 flex items-center justify-center shrink-0">
-                <Navigation className="w-3.5 h-3.5 text-slate-700" />
-              </div>
+              <Navigation className="w-4 h-4 shrink-0 text-slate-600" />
               <p className="text-xs font-semibold text-slate-500 truncate">
                 Titik Terdekat
               </p>
