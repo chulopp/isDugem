@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>RantauGuard — Edge HP Anak</title>
+  <title>isDugem - Edge HP Anak</title>
   <link rel="stylesheet" href="style.css">
   <!-- MQTT.js over WebSocket -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
   <header>
-    <h1>RantauGuard (Anak)</h1>
+    <h1>isDugem (Anak)</h1>
     <span id="mqttStatus" class="badge badge-disconnected">Disconnected</span>
   </header>
 
@@ -24,7 +24,7 @@
   </div>
 
   <div class="card">
-    <div class="card-title">Lokasi & GPS</div>
+    <div class="card-title">Lokasi & GPS Anak</div>
     <div class="sensor-grid">
       <div>
         <div class="sensor-label">Latitude</div>
@@ -41,6 +41,20 @@
       <div>
         <div class="sensor-label">Status GPS</div>
         <div id="valGpsStatus" class="sensor-val">Menunggu</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Lokasi Orang Tua (Live MQTT)</div>
+    <div class="sensor-grid">
+      <div>
+        <div class="sensor-label">GPS Ortu</div>
+        <div id="valOrtuGps" class="sensor-val">Menunggu Ortu</div>
+      </div>
+      <div>
+        <div class="sensor-label">Jarak ke Ortu</div>
+        <div id="valOrtuDist" class="sensor-val">-</div>
       </div>
     </div>
   </div>
@@ -74,7 +88,7 @@
   </div>
 
   <footer>
-    RantauGuard IoT Project &copy; 2026 — Modul Edge Anak
+    isDugem IoT Project &copy; 2026 - Modul Edge Anak
   </footer>
 
   <script src="config.js" onerror="console.warn('config.js belum dibuat. Silakan salin config.example.js ke config.js');"></script>

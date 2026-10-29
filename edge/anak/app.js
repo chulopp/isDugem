@@ -1,7 +1,7 @@
 /**
- * RantauGuard — Edge HP Anak (Starter Code)
+ * isDugem (RantauGuard) - Edge HP Anak (Fallback Standalone)
  * Tanggung Jawab: Baca Geolocation API, Web Audio API (RMS -> dB), DeviceMotion API,
- * publish telemetri ke broker MQTT, serta subscribe ke alerts & commands.
+ * publish telemetri ke broker MQTT, terima telemetri GPS orang tua, serta subscribe ke alerts & commands.
  */
 
 // Konfigurasi default (akan ditimpa oleh config.js jika tersedia)
@@ -9,9 +9,10 @@ const defaultProjectId = "isdugem_tim_01";
 const cfg = (typeof CONFIG !== "undefined") ? CONFIG : {
   PROJECT_ID: defaultProjectId,
   BROKER_WSS_URL: "wss://broker.hivemq.com:8884/mqtt",
-  PUBLISH_INTERVAL_MS: 2500,
+  PUBLISH_INTERVAL_MS: 1500,
   TOPICS: {
     TELEMETRY: `rantauguard/${defaultProjectId}/edge/anak/telemetry`,
+    ORTU_TELEMETRY: `rantauguard/${defaultProjectId}/edge/ortu/telemetry`,
     ALERTS: `rantauguard/${defaultProjectId}/alerts`,
     COMMAND_PING: `rantauguard/${defaultProjectId}/command/ping`,
     COMMAND_ALARM: `rantauguard/${defaultProjectId}/command/alarm`,
@@ -27,7 +28,8 @@ let publishTimer = null;
 const state = {
   location: { lat: 0.0, lon: 0.0, accuracy_m: 0.0 },
   audio: { rms: 0.0, db: 0.0 },
-  motion: { accel_magnitude: 9.8 }
+  motion: { accel_magnitude: 9.8 },
+  ortuLocation: null
 };
 
 // UI Elements
@@ -38,6 +40,8 @@ const ui = {
   valLon: document.getElementById("valLon"),
   valAccuracy: document.getElementById("valAccuracy"),
   valGpsStatus: document.getElementById("valGpsStatus"),
+  valOrtuGps: document.getElementById("valOrtuGps"),
+  valOrtuDist: document.getElementById("valOrtuDist"),
   valDb: document.getElementById("valDb"),
   valRms: document.getElementById("valRms"),
   valAccel: document.getElementById("valAccel"),
@@ -46,6 +50,18 @@ const ui = {
   alertStatus: document.getElementById("alertStatus"),
   alertReason: document.getElementById("alertReason"),
 };
+
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
 
 /**
  * 1. Geolocation API: Dapatkan posisi terkini
@@ -61,10 +77,15 @@ function initGps() {
       state.location.lat = Number(pos.coords.latitude.toFixed(6));
       state.location.lon = Number(pos.coords.longitude.toFixed(6));
       state.location.accuracy_m = Number((pos.coords.accuracy || 0).toFixed(1));
-      
+
       ui.valLat.innerText = state.location.lat;
       ui.valLon.innerText = state.location.lon;
       ui.valAccuracy.innerText = `${state.location.accuracy_m} m`;
+
+      if (state.ortuLocation && ui.valOrtuDist) {
+        const d = haversineM(state.location.lat, state.location.lon, state.ortuLocation.lat, state.ortuLocation.lon);
+        ui.valOrtuDist.innerText = d >= 1000 ? `${(d / 1000).toFixed(2)} km` : `${d} m`;
+      }
     },
     (err) => {
       console.warn("Gps error:", err.message);
@@ -120,11 +141,11 @@ function initMotion() {
   if (window.DeviceMotionEvent) {
     window.addEventListener("devicemotion", (event) => {
       const acc = event.accelerationIncludingGravity;
-      if (acc) {
-        const mag = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
-        state.motion.accel_magnitude = Number(mag.toFixed(2));
-        ui.valAccel.innerText = `${state.motion.accel_magnitude} m/s²`;
-      }
+      if (!acc) return;
+
+      const mag = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
+      state.motion.accel_magnitude = Number(mag.toFixed(2));
+      ui.valAccel.innerText = `${state.motion.accel_magnitude} m/s²`;
     });
   }
 }
@@ -146,8 +167,9 @@ function connectMqtt() {
     ui.mqttStatus.className = "badge badge-connected";
     console.log("MQTT Connected ke HiveMQ via WSS");
 
-    // Subscribe ke topic alerts dan perintah (commands)
+    // Subscribe ke topic alerts, telemetri ortu, dan perintah
     mqttClient.subscribe(cfg.TOPICS.ALERTS);
+    mqttClient.subscribe(cfg.TOPICS.ORTU_TELEMETRY);
     mqttClient.subscribe(cfg.TOPICS.COMMAND_PING);
     mqttClient.subscribe(cfg.TOPICS.COMMAND_ALARM);
     mqttClient.subscribe(cfg.TOPICS.COMMAND_REMINDER);
@@ -172,7 +194,17 @@ function connectMqtt() {
  * Handle incoming alert & command
  */
 function onMessage(topic, payload) {
-  console.log(`[Pesan Masuk] Topik: ${topic}`, payload);
+  if (topic.includes("edge/ortu/telemetry")) {
+    if (payload.location && ui.valOrtuGps) {
+      state.ortuLocation = payload.location;
+      ui.valOrtuGps.innerText = `${payload.location.lat.toFixed(4)}, ${payload.location.lon.toFixed(4)}`;
+      if (state.location.lat !== 0 && ui.valOrtuDist) {
+        const d = haversineM(state.location.lat, state.location.lon, payload.location.lat, payload.location.lon);
+        ui.valOrtuDist.innerText = d >= 1000 ? `${(d / 1000).toFixed(2)} km` : `${d} m`;
+      }
+    }
+    return;
+  }
 
   if (topic.includes("alerts")) {
     ui.alertBox.classList.add("active");
@@ -191,7 +223,7 @@ function onMessage(topic, payload) {
 }
 
 /**
- * Publish Telemetry sesuai kontrak Bagian 7.2 PRD
+ * Publish Telemetry sesuai kontrak Bagian 6.2 PRD
  */
 function publishTelemetry() {
   if (!mqttClient || !mqttClient.connected) return;
@@ -223,7 +255,7 @@ function publishTelemetry() {
 ui.btnStartSensors.addEventListener("click", async () => {
   ui.btnStartSensors.disabled = true;
   ui.btnStartSensors.innerText = "Sensor Berjalan...";
-  
+
   initGps();
   await initAudio();
   initMotion();

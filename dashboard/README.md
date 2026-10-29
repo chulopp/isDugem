@@ -1,52 +1,35 @@
-# Modul Dashboard (Next.js 14 App Router) — RantauGuard
+# Modul Dashboard (Next.js 14 App Router) - isDugem
 
-Modul ini adalah pusat pemantauan (command center) real-time berbasis web modern yang dibuka oleh pengguna/orang tua di browser laptop saat presentasi demo.
+Modul ini adalah pusat pemantauan (command center) real-time berbasis web modern yang dibuka oleh pengguna/orang tua di browser laptop saat presentasi demo maupun pemantauan sehari-hari.
 
 ---
 
 ## 1. Tech Stack
 - **Framework:** Next.js 14 (App Router) + TypeScript
-- **Styling:** Tailwind CSS (Dark Mode Slate/Zinc theme)
-- **Visualisasi Peta:** `react-leaflet` + Leaflet (CartoDB Dark Matter tile layer)
-- **Visualisasi Grafik:** `recharts` (Jarak POI & desibel suara)
+- **Styling:** Tailwind CSS (Modern Glassmorphism & Liquid Slate Theme)
+- **Visualisasi Peta:** `react-leaflet` + Leaflet (OpenStreetMap / CartoDB tile layer)
+- **Visualisasi Grafik:** `recharts` (Histori desibel suara dan jarak POI)
 - **Komunikasi Real-time:** `mqtt` (npm package, MQTT over WebSocket WSS port 8884)
 - **Icons:** `lucide-react`
 
 ---
 
-## 2. Rencana Inisialisasi Proyek (Dilakukan oleh Lead Dashboard)
+## 2. Struktur Komponen Utama
 
-Inisialisasi aplikasi Next.js di branch kerja `dashboard/setup`:
-```bash
-# Di dalam folder dashboard/
-npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir=false --import-alias="@/*"
-
-# Pasang dependensi tambahan
-npm install mqtt react-leaflet leaflet recharts lucide-react
-npm install -D @types/leaflet
-```
-
----
-
-## 3. Komponen Wajib (Sesuai PRD Bagian 8.7)
-
-1. `components/MapPanel.tsx` — Peta interaktif CartoDB Dark Matter, live marker posisi HP anak, dan lingkaran geofence untuk tiap POI (Kampus, Masjid, Kos, Bar).
-2. `components/AudioVisualizer.tsx` — Bar animasi equalizer real-time berdasarkan level `db` terkini (`Hening < 55`, `Normal 55–75`, `Bising > 75`).
-3. `components/StatusCard.tsx` — Kartu indikator status besar sesuai enum `AlertStatus` dengan aksen warna dinamis (Hijau, Kuning, Merah, Ungu Anomali).
-4. `components/CommandCenter.tsx` — Panel kontrol 3 tombol aksi cepat:
-   - `command/ping`
-   - `command/reminder`
-   - `command/alarm`
-5. `components/DemoPresetPanel.tsx` — Fitur simulasi demo kelas (preset jam kuliah/sholat/malam & tombol loncat lokasi POI) untuk mem-publish telemetri mock langsung ke broker tanpa berjalan fisik.
-6. `components/HistoryChart.tsx` — Grafik time-series tren desibel suara dan jarak geofence terkini.
-7. `hooks/useMqtt.ts` — Custom hook koneksi MQTT WebSocket, auto-reconnect, subscription topik `alerts` dan `edge/+/telemetry`.
-8. `hooks/useTelemetryStore.ts` — State management telemetri terkini dan histori 60 data terakhir.
-9. `lib/types.ts` — Interface TypeScript yang identik dengan kontrak payload di `docs/mqtt-schema.md`.
-10. `lib/mockData.ts` — Data tiruan untuk pengujian UI tanpa broker (`NEXT_PUBLIC_USE_MOCK=true`).
+1. `components/MapPanel.tsx` & `components/LeafletMapInner.tsx`: Peta interaktif live marker posisi HP Anak dan HP Orang Tua, rute jalan dinamis, dan lingkaran geofence untuk tiap POI (Kampus, Masjid, Kos, Bar).
+2. `components/KpiStrip.tsx`: Tampilan 3 metrik KPI status sistem keputusan, tingkat desibel suara langsung dengan visualizer, dan kecepatan gerak.
+3. `components/SystemControlPanel.tsx`: Panel kendali sistem berisi 3 tombol aksi cepat (Ping, Ingatkan, Alarm), status telemetri 2 sensor HP Ortu (GPS + Shake), input pesan khusus, dan log kejadian.
+4. `components/DemoPresetPanel.tsx`: Panel simulasi skenario pengujian demo (preset jam dan lokasi POI) untuk verifikasi tanpa berjalan kaki fisik.
+5. `components/HistoryChart.tsx`: Grafik time-series tren desibel suara dan jarak geofence terkini.
+6. `components/Sidebar.tsx`: Navigasi tab utama (Overview, Map, Analytics, Simulator), indikator status koneksi broker, dan tombol buka QR code.
+7. `components/QrConnectModal.tsx`: Modal scan QR code cepat untuk menghubungkan HP Anak (`/anak`) dan HP Ortu (`/ortu`).
+8. `hooks/useMqtt.ts`: Custom hook koneksi MQTT WebSocket, auto-reconnect, subscription topik telemetri, alert, dan command.
+9. `hooks/useTelemetryStore.ts`: State management telemetri, histori grafik, jejak rute perjalanan, dan event log.
+10. `lib/types.ts`: Interface TypeScript yang identik dengan kontrak data di `docs/mqtt-schema.md`.
 
 ---
 
-## 4. Cara Menjalankan Modul Secara Lokal
+## 3. Cara Menjalankan Modul Secara Lokal
 
 1. Salin konfigurasi environment:
    ```bash
@@ -56,4 +39,12 @@ npm install -D @types/leaflet
    ```bash
    npm run dev
    ```
-3. Buka browser pada [http://localhost:3000](http://localhost:3000).
+3. Buka peramban pada [http://localhost:3000](http://localhost:3000).
+
+---
+
+## 4. Rute Halaman (App Router)
+
+- `/` : Dashboard Pusat Kendali (Laptop / Layar Lebar)
+- `/anak` : Antarmuka HP Anak (Sensor GPS Hardware, Mikrofon dB, Akselerometer, dan Pantauan Lokasi GPS Ortu)
+- `/ortu` : Antarmuka HP Orang Tua (Sensor GPS Hardware, Akselerometer Shake-to-Ping, dan Pantauan Status Anak)

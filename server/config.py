@@ -224,7 +224,7 @@ def load_config(env_file: Optional[Path] = None) -> Config:
     mqtt_port = _env_int("MQTT_PORT", 8883)
     if not 1 <= mqtt_port <= 65535:
         raise ConfigError(
-            f"MQTT_PORT harus berada pada rentang 1–65535, dapat: {mqtt_port}"
+            f"MQTT_PORT harus berada pada rentang 1-65535, dapat: {mqtt_port}"
         )
 
     mqtt_keepalive = _env_int("MQTT_KEEPALIVE", 60)
