@@ -35,6 +35,7 @@ export interface OrtuTelemetry {
   location: {
     lat: number;
     lon: number;
+    accuracy_m?: number;
   };
   motion: {
     accel_magnitude: number;
@@ -57,7 +58,7 @@ export interface Alert {
 }
 
 export interface CommandPayload {
-  triggered_by: "ortu" | "dashboard";
+  triggered_by: "ortu" | "dashboard" | "anak";
   timestamp_ms: number;
   message: string;
 }

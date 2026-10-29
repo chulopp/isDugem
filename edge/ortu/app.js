@@ -1,14 +1,14 @@
 /**
- * RantauGuard — Edge HP Ortu (Starter Code)
- * Tanggung Jawab: Deteksi shake via DeviceMotionEvent, publish telemetri ortu,
- * dan publish perintah (ping, alarm, reminder) ke broker MQTT.
+ * isDugem (RantauGuard) - Edge HP Ortu (Fallback Standalone)
+ * Tanggung Jawab: Pembacaan 2 sensor fisik (GPS Geolocation + Accelerometer DeviceMotionEvent),
+ * publish telemetri ortu, dan publish perintah (ping, alarm, reminder) ke broker MQTT.
  */
 
 const defaultProjectId = "isdugem_tim_01";
 const cfg = (typeof CONFIG !== "undefined") ? CONFIG : {
   PROJECT_ID: defaultProjectId,
   BROKER_WSS_URL: "wss://broker.hivemq.com:8884/mqtt",
-  PUBLISH_INTERVAL_MS: 3000,
+  PUBLISH_INTERVAL_MS: 1500,
   SHAKE_THRESHOLD: 18.0,
   TOPICS: {
     TELEMETRY: `rantauguard/${defaultProjectId}/edge/ortu/telemetry`,
@@ -25,7 +25,7 @@ let lastShakeTime = 0;
 let shakeDetectedFlag = false;
 
 const state = {
-  location: { lat: -6.9950, lon: 110.4210 },
+  location: { lat: -7.0540, lon: 110.4380, accuracy_m: 8.0 },
   motion: { accel_magnitude: 9.8, shake_detected: false }
 };
 
@@ -36,6 +36,7 @@ const ui = {
   btnReminder: document.getElementById("btnReminder"),
   btnAlarm: document.getElementById("btnAlarm"),
   shakeIndicator: document.getElementById("shakeIndicator"),
+  valGps: document.getElementById("valGps"),
   valAccel: document.getElementById("valAccel"),
   valLastShake: document.getElementById("valLastShake")
 };
@@ -71,6 +72,28 @@ function publishCommand(topic, messageText) {
   console.log(`[Command Sent] ${topic}:`, payload);
 }
 
+function initGeolocation() {
+  if ("geolocation" in navigator) {
+    const updatePos = (pos) => {
+      state.location.lat = Number(pos.coords.latitude.toFixed(6));
+      state.location.lon = Number(pos.coords.longitude.toFixed(6));
+      state.location.accuracy_m = Number((pos.coords.accuracy || 8.0).toFixed(1));
+      if (ui.valGps) {
+        ui.valGps.innerText = `${state.location.lat.toFixed(4)}, ${state.location.lon.toFixed(4)}`;
+      }
+    };
+    navigator.geolocation.getCurrentPosition(updatePos, () => {}, {
+      enableHighAccuracy: true,
+      timeout: 5000
+    });
+    navigator.geolocation.watchPosition(updatePos, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 5000
+    });
+  }
+}
+
 function initMotion() {
   if (window.DeviceMotionEvent) {
     window.addEventListener("devicemotion", (event) => {
@@ -87,9 +110,10 @@ function initMotion() {
         lastShakeTime = now;
         shakeDetectedFlag = true;
         ui.shakeIndicator.classList.add("shaking");
-        ui.shakeIndicator.innerText = "⚡ Guncangan Terdeteksi! Mengirim Ping...";
+        ui.shakeIndicator.innerText = "Guncangan Terdeteksi! Mengirim Ping...";
         ui.valLastShake.innerText = new Date().toLocaleTimeString();
 
+        publishTelemetry();
         publishCommand(cfg.TOPICS.COMMAND_PING, "Orang tua menggoyangkan HP untuk mengecek Anda!");
 
         setTimeout(() => {
@@ -123,8 +147,9 @@ function publishTelemetry() {
 // Event Listeners
 ui.btnStart.addEventListener("click", () => {
   ui.btnStart.disabled = true;
-  ui.btnStart.innerText = "Sistem Ortu Aktif";
+  ui.btnStart.innerText = "Sistem Ortu Aktif (GPS + Shake)";
   connectMqtt();
+  initGeolocation();
   initMotion();
   setInterval(publishTelemetry, cfg.PUBLISH_INTERVAL_MS);
 });

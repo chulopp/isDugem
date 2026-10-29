@@ -10,16 +10,44 @@ import {
   Square,
   ShieldCheck,
   ShieldAlert,
+  Activity,
+  Navigation,
+  Lock,
 } from "lucide-react";
 import { useMqtt } from "@/hooks/useMqtt";
 import {
   MQTT_TOPICS,
   STATUS_DISPLAY,
+  haversineDistanceM,
 } from "@/lib/mqttTopics";
 import { Alert, AnakTelemetry, OrtuTelemetry } from "@/lib/types";
 
+const ORTU_PRESET_SPOTS = [
+  {
+    id: "rumah_tembalang",
+    name: "Rumah Orang Tua (Tembalang)",
+    area: "Semarang Atas",
+    lat: -7.054,
+    lon: 110.438,
+  },
+  {
+    id: "kantor_simpanglima",
+    name: "Kantor Orang Tua (Simpang Lima)",
+    area: "Semarang Tengah",
+    lat: -6.9904,
+    lon: 110.4229,
+  },
+];
+
 export default function OrtuEdgePage() {
   const [sensorActive, setSensorActive] = useState(false);
+  const [sequence, setSequence] = useState(0);
+  const [gpsCoords, setGpsCoords] = useState({
+    lat: -7.054,
+    lon: 110.438,
+    accuracy_m: 8.0,
+  });
+  const [lockedLocId, setLockedLocId] = useState<string>("gps_asli");
   const [accelMag, setAccelMag] = useState(9.8);
   const [isShaking, setIsShaking] = useState(false);
   const [lastActionNote, setLastActionNote] = useState<string | null>(null);
@@ -28,12 +56,25 @@ export default function OrtuEdgePage() {
   const [latestAnakTelemetry, setLatestAnakTelemetry] =
     useState<AnakTelemetry | null>(null);
 
-  const seqRef = useRef(0);
+  const stateRef = useRef({
+    lat: -7.054,
+    lon: 110.438,
+    accuracy_m: 8.0,
+    realLat: -7.054,
+    realLon: 110.438,
+    realAcc: 8.0,
+    lockedLocId: "gps_asli",
+    accel: 9.8,
+    shake: false,
+    seq: Math.floor(Date.now() / 200),
+    localCount: 0,
+  });
+
   const lastShakeMsRef = useRef(0);
-  const accelRef = useRef(9.8);
-  const shakeFlagRef = useRef(false);
+  const watchIdRef = useRef<number | null>(null);
   const pubIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
+  const publishOrtuNowRef = useRef<() => void>(() => {});
 
   const { isConnected, publishRaw, publishCommand } = useMqtt({
     onAlert: (payload) => {
@@ -42,7 +83,53 @@ export default function OrtuEdgePage() {
     onAnakTelemetry: (payload: AnakTelemetry) => {
       setLatestAnakTelemetry(payload);
     },
+    onOrtuTelemetry: (payload: OrtuTelemetry) => {
+      if (payload.sequence && payload.sequence > stateRef.current.seq) {
+        stateRef.current.seq = payload.sequence;
+      }
+    },
   });
+
+  const publishOrtuNow = useCallback(() => {
+    if (stateRef.current.lockedLocId !== "gps_asli") {
+      const preset = ORTU_PRESET_SPOTS.find(
+        (s) => s.id === stateRef.current.lockedLocId
+      );
+      if (preset) {
+        stateRef.current.lat = preset.lat;
+        stateRef.current.lon = preset.lon;
+        stateRef.current.accuracy_m = 5.0;
+      }
+    }
+
+    const nextSeq = Math.max(
+      stateRef.current.seq + 1,
+      Math.floor(Date.now() / 200)
+    );
+    stateRef.current.seq = nextSeq;
+    stateRef.current.localCount += 1;
+    setSequence(stateRef.current.localCount);
+
+    const payload: OrtuTelemetry = {
+      device_id: "ortu",
+      sequence: nextSeq,
+      sent_at_ms: Date.now(),
+      location: {
+        lat: stateRef.current.lat,
+        lon: stateRef.current.lon,
+        accuracy_m: stateRef.current.accuracy_m,
+      },
+      motion: {
+        accel_magnitude: stateRef.current.accel,
+        shake_detected: stateRef.current.shake,
+      },
+    };
+    publishRaw(MQTT_TOPICS.ORTU_TELEMETRY, payload);
+  }, [publishRaw]);
+
+  useEffect(() => {
+    publishOrtuNowRef.current = publishOrtuNow;
+  }, [publishOrtuNow]);
 
   const triggerManualCommand = useCallback(
     (type: "ping" | "reminder" | "alarm", customText?: string) => {
@@ -59,6 +146,10 @@ export default function OrtuEdgePage() {
   );
 
   const stopOrtuSensor = useCallback(() => {
+    if (watchIdRef.current !== null && "geolocation" in navigator) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
     if (pubIntervalRef.current) {
       clearInterval(pubIntervalRef.current);
       pubIntervalRef.current = null;
@@ -73,6 +164,50 @@ export default function OrtuEdgePage() {
   const startOrtuSensor = async () => {
     setSensorActive(true);
 
+    // 1. Sensor Fisik 1: Geolocation API (GPS HP Orang Tua)
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lon = Number(pos.coords.longitude.toFixed(6));
+          const acc = Number((pos.coords.accuracy || 8).toFixed(1));
+          stateRef.current.realLat = lat;
+          stateRef.current.realLon = lon;
+          stateRef.current.realAcc = acc;
+          if (stateRef.current.lockedLocId === "gps_asli") {
+            stateRef.current.lat = lat;
+            stateRef.current.lon = lon;
+            stateRef.current.accuracy_m = acc;
+            setGpsCoords({ lat, lon, accuracy_m: acc });
+            publishOrtuNowRef.current();
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lon = Number(pos.coords.longitude.toFixed(6));
+          const acc = Number((pos.coords.accuracy || 8).toFixed(1));
+          stateRef.current.realLat = lat;
+          stateRef.current.realLon = lon;
+          stateRef.current.realAcc = acc;
+
+          if (stateRef.current.lockedLocId === "gps_asli") {
+            stateRef.current.lat = lat;
+            stateRef.current.lon = lon;
+            stateRef.current.accuracy_m = acc;
+            setGpsCoords({ lat, lon, accuracy_m: acc });
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+      );
+    }
+
+    // 2. Sensor Fisik 2: DeviceMotion API (Accelerometer Shake-to-Ping)
     if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
       if (
         typeof (DeviceMotionEvent as unknown as { requestPermission?: () => Promise<string> })
@@ -93,21 +228,22 @@ export default function OrtuEdgePage() {
           (acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2
         );
         const rounded = Number(mag.toFixed(1));
-        accelRef.current = rounded;
+        stateRef.current.accel = rounded;
         setAccelMag(rounded);
 
         const now = Date.now();
         if (rounded > 18.0 && now - lastShakeMsRef.current > 2000) {
           lastShakeMsRef.current = now;
-          shakeFlagRef.current = true;
+          stateRef.current.shake = true;
           setIsShaking(true);
+          publishOrtuNowRef.current();
           triggerManualCommand(
             "ping",
             "Guncangan HP orang tua terdeteksi. Mengecek posisi anak."
           );
 
           setTimeout(() => {
-            shakeFlagRef.current = false;
+            stateRef.current.shake = false;
             setIsShaking(false);
           }, 1500);
         }
@@ -120,32 +256,57 @@ export default function OrtuEdgePage() {
       window.addEventListener("devicemotion", onMotion);
     }
 
+    publishOrtuNow();
+
     pubIntervalRef.current = setInterval(() => {
-      seqRef.current += 1;
-      const payload: OrtuTelemetry = {
-        device_id: "ortu",
-        sequence: seqRef.current,
-        sent_at_ms: Date.now(),
-        location: {
-          lat: -7.054,
-          lon: 110.438,
-        },
-        motion: {
-          accel_magnitude: accelRef.current,
-          shake_detected: shakeFlagRef.current,
-        },
-      };
-      publishRaw(MQTT_TOPICS.ORTU_TELEMETRY, payload);
-    }, 3000);
+      publishOrtuNowRef.current();
+    }, 1500);
   };
 
   useEffect(() => {
     return () => stopOrtuSensor();
   }, [stopOrtuSensor]);
 
+  const handleSelectOrtuLoc = (locId: string) => {
+    stateRef.current.lockedLocId = locId;
+    setLockedLocId(locId);
+
+    if (locId === "gps_asli") {
+      stateRef.current.lat = stateRef.current.realLat;
+      stateRef.current.lon = stateRef.current.realLon;
+      stateRef.current.accuracy_m = stateRef.current.realAcc;
+      setGpsCoords({
+        lat: stateRef.current.realLat,
+        lon: stateRef.current.realLon,
+        accuracy_m: stateRef.current.realAcc,
+      });
+    } else {
+      const preset = ORTU_PRESET_SPOTS.find((s) => s.id === locId);
+      if (preset) {
+        stateRef.current.lat = preset.lat;
+        stateRef.current.lon = preset.lon;
+        stateRef.current.accuracy_m = 5.0;
+        setGpsCoords({ lat: preset.lat, lon: preset.lon, accuracy_m: 5.0 });
+      }
+    }
+
+    publishOrtuNow();
+  };
+
   const isBackendActive = isConnected && childAlert !== null;
   const statusInfo = childAlert
     ? STATUS_DISPLAY[childAlert.status] || STATUS_DISPLAY.NORMAL
+    : null;
+
+  const distanceToAnakM = latestAnakTelemetry
+    ? Math.round(
+        haversineDistanceM(
+          gpsCoords.lat,
+          gpsCoords.lon,
+          latestAnakTelemetry.location.lat,
+          latestAnakTelemetry.location.lon
+        )
+      )
     : null;
 
   return (
@@ -186,13 +347,13 @@ export default function OrtuEdgePage() {
               ? "Menghubungkan"
               : isBackendActive
               ? "Backend Aktif"
-              : "Broker Terhubung (Menunggu Backend)"}
+              : "Broker Terhubung"}
           </span>
         </div>
 
-        {/* 2. Kartu Status Anak Terkini */}
+        {/* 2. Kartu Status & Lokasi Anak Terkini */}
         <div
-          className={`p-5 rounded-3xl border space-y-2 ${
+          className={`p-5 rounded-3xl border space-y-2.5 ${
             statusInfo
               ? `${statusInfo.badgeBg} ${statusInfo.borderColor}`
               : "bg-slate-50/90 border-slate-200/80"
@@ -224,17 +385,29 @@ export default function OrtuEdgePage() {
             {childAlert
               ? childAlert.reason
               : latestAnakTelemetry
-              ? `Telemetry anak diterima (sensor #${latestAnakTelemetry.sequence}, ${latestAnakTelemetry.audio.db.toFixed(1)} dB). Menunggu evaluasi resmi dari server backend.`
+              ? `Telemetri anak diterima (${latestAnakTelemetry.audio.db.toFixed(1)} dB). Menunggu evaluasi dari server backend.`
               : "Menunggu alert resmi dari backend..."}
           </p>
-          {latestAnakTelemetry && childAlert && (
-            <p className="text-[11px] text-slate-500 font-mono mt-1 pt-1.5 border-t border-slate-200/60">
-              Live Sensor: {latestAnakTelemetry.audio.db.toFixed(1)} dB · Paket #{latestAnakTelemetry.sequence}
-            </p>
+
+          {latestAnakTelemetry && (
+            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] font-mono text-slate-600">
+              <span>
+                GPS Anak: {latestAnakTelemetry.location.lat.toFixed(4)},{" "}
+                {latestAnakTelemetry.location.lon.toFixed(4)}
+              </span>
+              {distanceToAnakM !== null && (
+                <span className="inline-flex items-center gap-1 font-sans font-bold text-slate-800 bg-white/80 px-2 py-0.5 rounded-md border border-slate-200/80">
+                  <Navigation className="w-3 h-3 text-indigo-600" />
+                  {distanceToAnakM >= 1000
+                    ? `${(distanceToAnakM / 1000).toFixed(2)} km`
+                    : `${distanceToAnakM} m`}
+                </span>
+              )}
+            </div>
           )}
         </div>
 
-        {/* 3. Kartu Sensor Gerak Shake-to-Ping */}
+        {/* 3. Kartu 2 Sensor Fisik Ortu (GPS + Accelerometer Shake-to-Ping) */}
         <div className="p-5 rounded-3xl bg-slate-50/90 border border-slate-200/80 space-y-4">
           <button
             onClick={sensorActive ? stopOrtuSensor : startOrtuSensor}
@@ -247,31 +420,57 @@ export default function OrtuEdgePage() {
             {sensorActive ? (
               <>
                 <Square className="w-4 h-4 fill-current" />
-                <span>Hentikan Sensor Gerak</span>
+                <span>Hentikan Sensor Ortu (Paket #{sequence})</span>
               </>
             ) : (
               <>
                 <Play className="w-4 h-4 fill-current" />
-                <span>Aktifkan Sensor Shake-to-Ping</span>
+                <span>Mulai Sensor GPS & Shake-to-Ping</span>
               </>
             )}
           </button>
 
+          {/* Indikator 2 Sensor Hardware Ortu: GPS & Akselerometer */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-200/70">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 mb-1">
+                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                <span>GPS Ortu</span>
+              </div>
+              <p className="text-[11px] font-bold font-mono text-slate-900 whitespace-nowrap">
+                {gpsCoords.lat.toFixed(4)}, {gpsCoords.lon.toFixed(4)}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Akurasi ±{gpsCoords.accuracy_m} m
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-200/70">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 mb-1">
+                <Activity className="w-3.5 h-3.5 text-slate-400" />
+                <span>Gerak Ortu</span>
+              </div>
+              <p className="text-xs font-bold text-slate-900">
+                {accelMag.toFixed(1)} m/s²
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Batas Shake: 18.0 m/s²
+              </p>
+            </div>
+          </div>
+
           <div
-            className={`p-4 rounded-2xl border text-center transition-all ${
+            className={`p-3.5 rounded-2xl border text-center transition-all ${
               isShaking
                 ? "bg-emerald-50 border-emerald-300 text-emerald-900"
                 : "bg-white border-slate-200/80 text-slate-700"
             }`}
           >
-            <Smartphone className="w-6 h-6 mx-auto mb-1.5 text-slate-700" />
+            <Smartphone className="w-5 h-5 mx-auto mb-1 text-slate-700" />
             <p className="text-xs font-bold">
               {isShaking
-                ? "Guncangan Terdeteksi. Mengirim Ping..."
-                : "Goyangkan HP untuk Kirim Ping"}
-            </p>
-            <p className="text-[11px] font-mono text-slate-400 mt-1">
-              Akselerasi: {accelMag.toFixed(1)} m/s² (Batas: 18.0 m/s²)
+                ? "Guncangan Terdeteksi. Mengirim Ping ke Anak..."
+                : "Goyangkan HP Orang Tua untuk Kirim Ping"}
             </p>
           </div>
         </div>
@@ -311,6 +510,51 @@ export default function OrtuEdgePage() {
               {lastActionNote}
             </p>
           )}
+        </div>
+
+        {/* 5. Kartu Mode Sumber Lokasi GPS Ortu */}
+        <div className="p-5 rounded-3xl bg-slate-50/90 border border-slate-200/80 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+              <Lock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Sumber Lokasi GPS Ortu</span>
+            </span>
+            <span className="text-[10px] font-medium text-slate-400">
+              Dikirim ke HP Anak
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-1.5">
+            <button
+              onClick={() => handleSelectOrtuLoc("gps_asli")}
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold text-left flex items-center justify-between border transition-all ${
+                lockedLocId === "gps_asli"
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-700 border-slate-200/80 hover:bg-slate-100"
+              }`}
+            >
+              <span>Gunakan GPS Asli HP Ortu</span>
+              <span className="text-[10px] opacity-75">Sensor Hardware</span>
+            </button>
+
+            {ORTU_PRESET_SPOTS.map((spot) => {
+              const isSelected = lockedLocId === spot.id;
+              return (
+                <button
+                  key={spot.id}
+                  onClick={() => handleSelectOrtuLoc(spot.id)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-semibold text-left flex items-center justify-between border transition-all ${
+                    isSelected
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-700 border-slate-200/80 hover:bg-slate-100"
+                  }`}
+                >
+                  <span>Simulasi di {spot.name}</span>
+                  <span className="text-[10px] opacity-75">{spot.area}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

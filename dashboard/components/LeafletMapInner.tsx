@@ -12,8 +12,8 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MACRO_ZONES, POI_SPOTS } from "@/lib/mqttTopics";
-import { AlertStatus, PoiSpot } from "@/lib/types";
+import { MACRO_ZONES, POI_SPOTS, haversineDistanceM } from "@/lib/mqttTopics";
+import { AlertStatus, OrtuTelemetry, PoiSpot } from "@/lib/types";
 
 interface LeafletMapInnerProps {
   targetLat: number;
@@ -23,6 +23,7 @@ interface LeafletMapInnerProps {
   status: AlertStatus;
   nearestSpot: PoiSpot;
   nearestDistM: number;
+  ortuTelemetry?: OrtuTelemetry | null;
   trailCoords: [number, number][];
   activeRouteCoords: [number, number][];
   isTripRunning?: boolean;
@@ -123,6 +124,29 @@ function createAnakIcon(status: AlertStatus, bearingDeg: number) {
   });
 }
 
+function createOrtuIcon(isShaking: boolean) {
+  const mainColor = isShaking ? "#D97706" : "#0F172A";
+  const ringColor = isShaking
+    ? "rgba(217, 119, 6, 0.35)"
+    : "rgba(15, 23, 42, 0.20)";
+
+  const html = `
+    <div style="position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;width:38px;height:38px;border-radius:9999px;background:${ringColor};"></div>
+      <div style="position:relative;width:28px;height:28px;border-radius:9999px;background:${mainColor};border:2.5px solid #ffffff;box-shadow:0 4px 10px rgba(15,23,42,0.25);display:flex;align-items:center;justify-content:center;color:#ffffff;font-size:10px;font-weight:800;">
+        ORTU
+      </div>
+    </div>
+  `;
+
+  return L.divIcon({
+    className: "custom-ortu-marker",
+    html,
+    iconSize: [42, 42],
+    iconAnchor: [21, 21],
+  });
+}
+
 function createPoiIcon(spot: PoiSpot) {
   const labelBg = spot.color;
   const shortTag =
@@ -159,6 +183,7 @@ export default function LeafletMapInner({
   status,
   nearestSpot,
   nearestDistM,
+  ortuTelemetry,
   trailCoords,
   activeRouteCoords,
   isTripRunning = false,
@@ -223,6 +248,20 @@ export default function LeafletMapInner({
   }, [targetLat, targetLon]);
 
   const anakIcon = createAnakIcon(status, bearing);
+  const ortuIcon = ortuTelemetry
+    ? createOrtuIcon(ortuTelemetry.motion.shake_detected)
+    : null;
+
+  const ortuDistM = ortuTelemetry
+    ? Math.round(
+        haversineDistanceM(
+          renderedPos[0],
+          renderedPos[1],
+          ortuTelemetry.location.lat,
+          ortuTelemetry.location.lon
+        )
+      )
+    : null;
 
   return (
     <MapContainer
@@ -333,6 +372,47 @@ export default function LeafletMapInner({
             opacity: 0.75,
           }}
         />
+      )}
+
+      {/* Marker Live Perangkat Orang Tua (Jika Aktif) */}
+      {ortuTelemetry && ortuIcon && (
+        <>
+          <Circle
+            center={[ortuTelemetry.location.lat, ortuTelemetry.location.lon]}
+            radius={Math.max(12, Math.min(ortuTelemetry.location.accuracy_m ?? 10, 50))}
+            pathOptions={{
+              color: "#334155",
+              weight: 1,
+              fillColor: "#64748B",
+              fillOpacity: 0.12,
+            }}
+          />
+          <Marker
+            position={[ortuTelemetry.location.lat, ortuTelemetry.location.lon]}
+            icon={ortuIcon}
+          >
+            <Popup>
+              <div className="text-xs space-y-1">
+                <p className="font-bold text-slate-900">Perangkat Orang Tua</p>
+                {ortuDistM !== null && (
+                  <p className="text-slate-600">
+                    Jarak ke Anak:{" "}
+                    {ortuDistM >= 1000
+                      ? `${(ortuDistM / 1000).toFixed(2)} km`
+                      : `${ortuDistM} m`}
+                  </p>
+                )}
+                <p className="text-slate-600">
+                  Akselerasi: {ortuTelemetry.motion.accel_magnitude.toFixed(1)} m/s²
+                </p>
+                <p className="font-mono text-[11px] text-slate-500">
+                  {ortuTelemetry.location.lat.toFixed(5)},{" "}
+                  {ortuTelemetry.location.lon.toFixed(5)}
+                </p>
+              </div>
+            </Popup>
+          </Marker>
+        </>
       )}
 
       {/* Lingkaran Akurasi GPS Anak */}

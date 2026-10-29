@@ -129,17 +129,32 @@ export default function SystemControlPanel({
             </p>
           )}
 
-          {/* Status Perangkat Edge 2 (Ortu) */}
-          <div className="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-600">
-            <span className="flex items-center gap-1.5 font-medium">
-              <Radio className="w-3.5 h-3.5 text-slate-500" />
-              Edge Ortu (Shake)
-            </span>
-            <span className="font-semibold text-slate-800">
-              {ortuTelemetry
-                ? `Aktif (#${ortuTelemetry.sequence})`
-                : "Siap Menerima"}
-            </span>
+          {/* Status Perangkat Edge 2 (Ortu: GPS + Shake) */}
+          <div className="mt-4 pt-3 border-t border-slate-200/80 space-y-1 text-[11px] text-slate-600">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Radio className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span>Edge Ortu (GPS + Shake)</span>
+              </span>
+              <span
+                className={`font-semibold shrink-0 ${
+                  ortuTelemetry ? "text-emerald-700" : "text-slate-800"
+                }`}
+              >
+                {ortuTelemetry ? "Aktif (Live)" : "Siap Menerima"}
+              </span>
+            </div>
+            {ortuTelemetry && (
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                <span>
+                  GPS: {ortuTelemetry.location.lat.toFixed(4)},{" "}
+                  {ortuTelemetry.location.lon.toFixed(4)}
+                </span>
+                <span>
+                  {ortuTelemetry.motion.accel_magnitude.toFixed(1)} m/s²
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

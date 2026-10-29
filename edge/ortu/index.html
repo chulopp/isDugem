@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>RantauGuard — Edge HP Orang Tua</title>
+  <title>isDugem - Edge HP Orang Tua</title>
   <link rel="stylesheet" href="style.css">
   <!-- MQTT.js over WebSocket -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
   <header>
-    <h1>RantauGuard (Ortu)</h1>
+    <h1>isDugem (Ortu)</h1>
     <span id="mqttStatus" class="badge badge-disconnected">Disconnected</span>
   </header>
 
   <div class="card">
-    <button id="btnStart" class="btn-success">Aktifkan Koneksi & Sensor Shake</button>
+    <button id="btnStart" class="btn-success">Aktifkan Sensor GPS & Shake</button>
   </div>
 
   <div class="card">
@@ -28,15 +28,19 @@
   <div class="card">
     <div class="card-title">Aksi & Perintah Cepat (Manual)</div>
     <div class="button-stack">
-      <button id="btnPing" class="btn-warning">📍 Kirim Ping Lokasi</button>
-      <button id="btnReminder">🕌 Kirim Pengingat Sholat/Kuliah</button>
-      <button id="btnAlarm" class="btn-danger">🚨 Bunyikan Alarm Bahaya</button>
+      <button id="btnPing" class="btn-warning">Kirim Ping Lokasi</button>
+      <button id="btnReminder">Kirim Pengingat Sholat/Kuliah</button>
+      <button id="btnAlarm" class="btn-danger">Bunyikan Alarm Bahaya</button>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-title">Status Telemetri Ortu</div>
+    <div class="card-title">Status 2 Sensor Telemetri Ortu</div>
     <div class="sensor-grid">
+      <div>
+        <div class="sensor-label">Koordinat GPS Ortu</div>
+        <div id="valGps" class="sensor-val">-7.0540, 110.4380</div>
+      </div>
       <div>
         <div class="sensor-label">Akselerasi</div>
         <div id="valAccel" class="sensor-val">- m/s²</div>
@@ -49,7 +53,7 @@
   </div>
 
   <footer>
-    RantauGuard IoT Project &copy; 2026 — Modul Edge Ortu
+    isDugem IoT Project &copy; 2026 - Modul Edge Ortu
   </footer>
 
   <script src="config.js" onerror="console.warn('config.js belum dibuat. Silakan salin config.example.js ke config.js');"></script>

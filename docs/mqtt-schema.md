@@ -1,6 +1,6 @@
 # Kontrak Data & Skema MQTT (Single Source of Truth)
 
-Dokumen ini adalah **sumber kebenaran tunggal** untuk protokol komunikasi antar-modul pada proyek **RantauGuard (isDugem)**.
+Dokumen ini adalah **sumber kebenaran tunggal** untuk protokol komunikasi antar-modul pada proyek **isDugem (RantauGuard)**.
 Semua modul (`edge`, `server`, dan `dashboard`) **WAJIB** mengikuti nama topik, tipe data, dan format payload JSON yang ada di sini tanpa modifikasi sepihak.
 
 ---
@@ -9,7 +9,7 @@ Semua modul (`edge`, `server`, dan `dashboard`) **WAJIB** mengikuti nama topik, 
 
 - **Host Broker:** `broker.hivemq.com`
 - **Port TLS (Edge & Server):** `8883` (MQTTS over TLS)
-- **Port WSS (Dashboard Browser):** `8884` (MQTT over Secure WebSocket)
+- **Port WSS (Dashboard & Edge PWA Browser):** `8884` (MQTT over Secure WebSocket)
   - URL WSS: `wss://broker.hivemq.com:8884/mqtt`
 - **Prefix Topik (`PROJECT_ID`):** Diambil dari variabel lingkungan (default: `isdugem_tim_01`).
   - Digunakan untuk mengisolasi topik agar tidak bertabrakan dengan pengguna lain di HiveMQ publik.
@@ -20,19 +20,20 @@ Semua modul (`edge`, `server`, dan `dashboard`) **WAJIB** mengikuti nama topik, 
 
 | Topik | Publisher | Subscriber | QoS | Keterangan |
 |---|---|---|---|---|
-| `rantauguard/{PROJECT_ID}/edge/anak/telemetry` | Edge Anak | Server | 1 | Telemetri sensor berkala (GPS, audio dB, accelerometer) setiap 2-3 detik |
-| `rantauguard/{PROJECT_ID}/edge/ortu/telemetry` | Edge Ortu | Server | 1 | Telemetri posisi & status goyangan (shake) HP ortu |
-| `rantauguard/{PROJECT_ID}/alerts` | Server | Edge Anak, Edge Ortu, Dashboard | 1 | Hasil klasifikasi status dan evaluasi aturan dari server |
-| `rantauguard/{PROJECT_ID}/command/ping` | Edge Ortu, Dashboard | Edge Anak, Server | 1 | Perintah cek status / getar HP anak |
-| `rantauguard/{PROJECT_ID}/command/alarm` | Dashboard | Edge Anak | 1 | Perintah bunyikan alarm darurat di HP anak |
-| `rantauguard/{PROJECT_ID}/command/reminder` | Dashboard | Edge Anak | 1 | Perintah pengingat ibadah/kuliah di HP anak |
+| `rantauguard/{PROJECT_ID}/edge/anak/telemetry` | Edge Anak, Dashboard | Server, Edge Ortu, Dashboard | 1 | Telemetri 3 sensor berkala (GPS, audio dB, accelerometer) setiap 1 detik |
+| `rantauguard/{PROJECT_ID}/edge/ortu/telemetry` | Edge Ortu | Server, Edge Anak, Dashboard | 1 | Telemetri 2 sensor berkala (posisi GPS live & akselerometer shake) HP ortu setiap 1.5 detik |
+| `rantauguard/{PROJECT_ID}/alerts` | Server | Edge Anak, Edge Ortu, Dashboard | 1 | Hasil klasifikasi status dan evaluasi aturan dari server (retained) |
+| `rantauguard/{PROJECT_ID}/command/ping` | Edge Ortu, Dashboard | Edge Anak, Server, Dashboard | 1 | Perintah cek status / getar HP anak |
+| `rantauguard/{PROJECT_ID}/command/alarm` | Edge Ortu, Dashboard | Edge Anak, Dashboard | 1 | Perintah bunyikan alarm darurat di HP anak |
+| `rantauguard/{PROJECT_ID}/command/reminder` | Edge Ortu, Dashboard | Edge Anak, Dashboard | 1 | Perintah pengingat ibadah/kuliah di HP anak |
+| `rantauguard/{PROJECT_ID}/command/timemode` | Edge Anak, Dashboard | Edge Anak, Dashboard | 1 | Sinkronisasi simulasi waktu dan kunci koordinat lokasi demo dua arah |
 
 ---
 
 ## 3. Spesifikasi Payload JSON
 
 ### 3.1 `rantauguard/{PROJECT_ID}/edge/anak/telemetry`
-Dipublish oleh `edge/anak` secara berkala (tiap 2-3 detik):
+Dipublish oleh `edge/anak` (`/anak`) secara berkala (tiap 1 detik) dari 3 sensor fisik (GPS Geolocation, Web Audio API mikrofon, dan DeviceMotionEvent akselerometer):
 ```json
 {
   "device_id": "anak",
@@ -54,7 +55,7 @@ Dipublish oleh `edge/anak` secara berkala (tiap 2-3 detik):
 ```
 
 ### 3.2 `rantauguard/{PROJECT_ID}/edge/ortu/telemetry`
-Dipublish oleh `edge/ortu` secara berkala atau saat terjadi event:
+Dipublish oleh `edge/ortu` (`/ortu`) secara berkala (tiap 1.5 detik) atau saat terjadi event dari 2 sensor fisik (GPS Geolocation dan DeviceMotionEvent akselerometer):
 ```json
 {
   "device_id": "ortu",
@@ -62,7 +63,8 @@ Dipublish oleh `edge/ortu` secara berkala atau saat terjadi event:
   "sent_at_ms": 1790000000000,
   "location": {
     "lat": -7.0540,
-    "lon": 110.4380
+    "lon": 110.4380,
+    "accuracy_m": 8.0
   },
   "motion": {
     "accel_magnitude": 9.8,
@@ -97,6 +99,7 @@ Dipublish oleh `server` setiap kali terjadi perubahan status klasifikasi atau ko
 - `NORMAL`
 
 ### 3.4 Command Payloads (`command/ping`, `command/alarm`, `command/reminder`)
+Nilai `triggered_by` dapat berupa `"ortu"`, `"dashboard"`, atau `"anak"` (pada topik `command/timemode`):
 ```json
 {
   "triggered_by": "ortu",
@@ -129,7 +132,7 @@ Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboa
     "lon": 110.429807,
     "radius_m": 250,
     "sub_points": [
-      { "name": "RedHare Semarang", "lat": -6.976429, "lon": 110.412950 },
+      { "name": "RedHare Semarang", "lat": -6.968000, "lon": 110.428500 },
       { "name": "Marabunta Kota Lama", "lat": -6.966445, "lon": 110.430036 },
       { "name": "Golden Tiger Semarang", "lat": -6.966984, "lon": 110.429807 },
       { "name": "HW Tiger Club Semarang", "lat": -6.965717, "lon": 110.429464 }
@@ -145,10 +148,10 @@ Titik koordinat referensi geofencing harus sama persis antara Server dan Dashboa
 
 | Waktu (`time_label`) | Jarak POI | Desibel (dB) | Status Klasifikasi |
 |---|---|---|---|
-| `jam_kuliah` | ≤ 150m kampus | < 65 dB | `SEDANG_KULIAH` |
+| `jam_kuliah` | <= 150m kampus | < 65 dB | `SEDANG_KULIAH` |
 | `jam_kuliah` | > 150m kampus | bebas | `ALERT_BOLOS_KULIAH` |
 | `waktu_sholat` | > 100m masjid | bebas | `WARNING_BELUM_KE_MASJID` |
-| `jam_malam` | ≤ 50m kos (`claimed_at_kos=true`) | > 80 dB | `ANOMALY_FAKE_GPS` (Prioritas Tinggi) |
-| `jam_malam` | ≤ 50m kos | < 55 dB | `ISTIRAHAT_DI_KOS` |
-| `jam_malam` | ≤ 100m bar | > 75 dB | `CRITICAL_TERDETEKSI_DI_BAR` |
+| `jam_malam` | <= 750m kos (`claimed_at_kos=true`) | > 80 dB | `ANOMALY_FAKE_GPS` (Prioritas Tinggi) |
+| `jam_malam` | <= 750m kos | < 55 dB | `ISTIRAHAT_DI_KOS` |
+| `jam_malam` | <= 250m bar | > 75 dB | `CRITICAL_TERDETEKSI_DI_BAR` |
 | lainnya | - | - | `NORMAL` |

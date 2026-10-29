@@ -14,6 +14,7 @@ import {
   Alert,
   AnakTelemetry,
   LiveTripRoute,
+  OrtuTelemetry,
   PoiSpot,
 } from "@/lib/types";
 import {
@@ -33,6 +34,7 @@ const LeafletMapInner = dynamic(() => import("./LeafletMapInner"), {
 
 interface MapPanelProps {
   telemetry: AnakTelemetry;
+  ortuTelemetry?: OrtuTelemetry | null;
   alert: Alert;
   trailCoords: [number, number][];
   activeRouteCoords: [number, number][];
@@ -46,6 +48,7 @@ interface MapPanelProps {
 
 export default function MapPanel({
   telemetry,
+  ortuTelemetry,
   alert,
   trailCoords,
   activeRouteCoords,
@@ -98,6 +101,20 @@ export default function MapPanel({
           >
             Area Semarang Bawah
           </button>
+          {ortuTelemetry && (
+            <button
+              onClick={() =>
+                flyToRegion(
+                  ortuTelemetry.location.lat,
+                  ortuTelemetry.location.lon,
+                  15
+                )
+              }
+              className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200/80 text-slate-700 transition-colors"
+            >
+              Posisi Ortu
+            </button>
+          )}
           <button
             onClick={() => {
               setAutoFollow((prev) => !prev);
@@ -136,6 +153,7 @@ export default function MapPanel({
           status={alert.status}
           nearestSpot={nearestSpot}
           nearestDistM={nearestSpotDist}
+          ortuTelemetry={ortuTelemetry}
           trailCoords={trailCoords}
           activeRouteCoords={activeRouteCoords}
           isTripRunning={isTripRunning}

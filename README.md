@@ -26,9 +26,9 @@ Mahasiswa yang menjalani perkuliahan jauh dari keluarga (mahasiswa rantau) mengh
 Aplikasi pemantau lokasi konvensional memiliki kelemahan mendasar: **rentan terhadap manipulasi lokasi (*Fake GPS*)** dan tidak memiliki konteks aktivitas nyata.
 
 **isDugem** hadir sebagai solusi berbasis *Internet of Things* (IoT) yang menggabungkan:
-1. **Validasi Multisensor:** Memadukan sensor lokasi (GPS), sensor kebisingan suara sekitar (*Web Audio API* untuk membaca desibel), dan sensor gerak (*DeviceMotionEvent* / akselerometer).
+1. **Validasi Multisensor di Kedua Edge Device:** Memadukan **3 sensor fisik pada HP Anak** (GPS Geolocation, mikrofon *Web Audio API* untuk membaca desibel, dan akselerometer *DeviceMotionEvent*) serta **2 sensor fisik pada HP Orang Tua** (GPS Geolocation dan akselerometer *Shake-to-Ping*).
 2. **Verifikasi Silang (*Cross-Verification*):** Mendeteksi indikasi *Fake GPS* ketika koordinat anak diklaim berada di kos, namun tingkat kebisingan mikrofon terdeteksi tinggi pada jam malam.
-3. **Komunikasi Dua Arah (*Bidirectional MQTT*):** Memungkinkan orang tua melakukan *remote control* darurat seperti memicu dering alarm, mengirim pengingat, atau memeriksa posisi anak melalui gestur menggoyangkan ponsel (*shake-to-ping*).
+3. **Komunikasi & Pelacakan Lokasi Dua Arah (*Bidirectional MQTT*):** Memungkinkan orang tua melakukan *remote control* darurat (alarm, pengingat, *shake-to-ping*), sekaligus menampilkan koordinat GPS dan jarak lurus (*Haversine*) secara timbal balik di layar HP Anak, HP Orang Tua, dan peta Dashboard.
 
 ---
 
@@ -40,17 +40,17 @@ Aplikasi pemantau lokasi konvensional memiliki kelemahan mendasar: **rentan terh
 - **Klasifikasi Kontekstual Berbasis Waktu:**
   Evaluasi status berjalan dinamis mengikuti jendela waktu: Jam Kuliah (08:00 - 15:00 WIB), Waktu Sholat (Dzuhur, Ashar, Maghrib, Isya), Jam Malam (22:00 - 05:00 WIB), dan Jam Normal/Santai.
 
-- **Sensor Gerak Shake-to-Ping:**
-  Orang tua cukup menggoyangkan ponsel (*akselerasi > 18 m/s²*) untuk langsung mengirim sinyal periksa lokasi (*ping*) secara instan ke perangkat anak.
+- **Sensor Ganda HP Orang Tua (GPS Live & Shake-to-Ping):**
+  Perangkat orang tua membaca koordinat GPS asli (*Geolocation API*) yang dikirimkan secara langsung ke HP Anak dan peta Dashboard, serta mendeteksi guncangan ponsel (*akselerasi > 18 m/s²*) untuk mengirim sinyal periksa lokasi (*ping*) secara instan.
 
 - **Kontrol Perintah Jarak Jauh (Remote Command):**
   Orang tua dan operator dashboard dapat membunyikan sirine alarm darurat, mengirim teks pengingat belajar/ibadah, atau meminta pembaruan telemetri terkini.
 
 - **Peta Pelacakan Interaktif & Visualisasi Audio:**
-  Dashboard menyajikan peta pelacakan langsung (*Leaflet*), rute navigasi jalan (*OSRM integration*), indikator tingkat suara langsung (*dB level*), kecepatan gerak, dan riwayat kejadian tercatat.
+  Dashboard menyajikan peta pelacakan langsung (*Leaflet*) yang menampilkan posisi perangkat anak dan orang tua, rute navigasi jalan (*OSRM integration*), indikator tingkat suara langsung (*dB level*), kecepatan gerak, dan riwayat kejadian tercatat.
 
 - **Sinkronisasi Demo Dua Arah Real-Time:**
-  Tersedia fitur kunci koordinat demo dan kunci waktu demo di HP Anak maupun Dashboard laptop untuk mempermudah simulasi berbagai skenario pengujian tanpa jeda (*zero latency*).
+  Tersedia fitur kunci koordinat demo dan kunci waktu demo di HP Anak, HP Orang Tua, maupun Dashboard laptop untuk mempermudah simulasi berbagai skenario pengujian tanpa jeda (*zero latency*).
 
 ---
 
@@ -61,8 +61,8 @@ Sistem dirancang dengan arsitektur terdistribusi yang memisahkan antara antarmuk
 ```mermaid
 flowchart LR
     subgraph EdgeClients["Edge Clients (Smartphone PWA / HTTPS)"]
-        EA["Perangkat Anak (/anak)\n- Sensor GPS Hardware\n- Web Audio API (dB Suara)\n- Sensor Gerak (Akselerometer)\n- Kunci Lokasi & Waktu Demo"]
-        EO["Perangkat Ortu (/ortu)\n- Sensor Guncangan (Shake-to-Ping)\n- Tombol Remote Alarm / Ingatkan\n- Pantauan Status Anak"]
+        EA["Perangkat Anak (/anak) - 3 Sensor\n- Sensor GPS Hardware\n- Web Audio API (dB Suara)\n- Sensor Gerak (Akselerometer)\n- Pantauan Lokasi GPS Ortu"]
+        EO["Perangkat Ortu (/ortu) - 2 Sensor\n- Sensor GPS Hardware Ortu\n- Sensor Guncangan (Shake-to-Ping)\n- Tombol Remote Alarm / Ingatkan\n- Pantauan Status & Jarak Anak"]
     end
 
     subgraph BrokerCloud["Cloud Broker MQTT"]
@@ -74,24 +74,25 @@ flowchart LR
     end
 
     subgraph CommandCenter["Web Command Center (Next.js 14)"]
-        DASH["Dashboard Pemantauan (/)\n- Peta Pelacakan Leaflet Live\n- Panel Kontrol Alarm & Ping\n- Grafik Riwayat Sensor & Log Event\n- Simulator Skenario Pengujian"]
+        DASH["Dashboard Pemantauan (/)\n- Peta Pelacakan Leaflet Live (Anak & Ortu)\n- Panel Kontrol Alarm & Ping\n- Grafik Riwayat Sensor & Log Event\n- Simulator Skenario Pengujian"]
     end
 
     EA -->|"rantauguard/.../edge/anak/telemetry"| MQTT
     EO -->|"rantauguard/.../edge/ortu/telemetry\ncommand/ping | alarm | reminder"| MQTT
     MQTT -->|"Subscribe Telemetri Masuk"| ENGINE
     ENGINE -->|"Publish Alert Terklasifikasi (Retain)"| MQTT
-    MQTT -->|"Streaming Status Live"| DASH
-    MQTT -.->|"Perintah Suara & Getar Balik"| EA
+    MQTT -->|"Streaming Status & Lokasi Live"| DASH
+    MQTT -.->|"Lokasi GPS Ortu & Perintah Suara/Getar"| EA
+    MQTT -.->|"Status Alert & Lokasi GPS Anak"| EO
 ```
 
 ### Penjelasan Komponen Arsitektur:
 1. **Perangkat Anak (`/anak`):**
-   Aplikasi web mobile yang membaca sensor perangkat keras secara langsung (Geolocation, mikrofon, akselerometer) dan mempublikasikan data telemetri terstruktur setiap detik ke broker MQTT.
+   Aplikasi web mobile yang membaca **3 sensor perangkat keras** secara langsung (Geolocation GPS, mikrofon Web Audio API, dan akselerometer DeviceMotionEvent), mempublikasikan data telemetri setiap detik ke broker MQTT, serta menampilkan lokasi GPS dan jarak orang tua secara real-time.
 2. **Perangkat Orang Tua (`/ortu`):**
-   Aplikasi web mobile untuk orang tua yang menampilkan status terkini anak dan mendeteksi gestur guncangan fisik untuk mengirim perintah *ping*.
+   Aplikasi web mobile untuk orang tua yang membaca **2 sensor perangkat keras** secara langsung (Geolocation GPS dan akselerometer DeviceMotionEvent), mengirim posisi GPS orang tua ke perangkat anak dan peta dashboard, serta mendeteksi gestur guncangan fisik untuk mengirim perintah *ping*.
 3. **Dashboard Pemantauan (`/`):**
-   Pusat kendali berbasis Next.js 14 yang menampilkan visualisasi data terpadu, pemetaan geografis, grafik tren kebisingan, dan panel kendali sistem.
+   Pusat kendali berbasis Next.js 14 yang menampilkan visualisasi data terpadu, pemetaan geografis untuk perangkat anak dan orang tua, grafik tren kebisingan, dan panel kendali sistem.
 4. **Server Decision Engine (`server/`):**
    Layanan Python independen yang melakukan perhitungan matematis jarak Haversine terhadap titik-titik POI, mengonversi sinyal audio RMS ke skala desibel, dan mengklasifikasikan status keamanan mahasiswa rantau.
 
@@ -123,8 +124,8 @@ Seluruh komunikasi antar-entitas menggunakan standar pertukaran pesan MQTT teren
 ### Struktur Topik MQTT:
 ```
 rantauguard/{PROJECT_ID}/
-├── edge/anak/telemetry       # Paket data sensor lokasi, dB audio, akselerometer anak
-├── edge/ortu/telemetry       # Paket data status guncangan (shake) dari orang tua
+├── edge/anak/telemetry       # Paket data 3 sensor anak (lokasi GPS, dB audio, akselerometer)
+├── edge/ortu/telemetry       # Paket data 2 sensor orang tua (lokasi GPS live, akselerometer shake)
 ├── alerts                    # Keputusan resmi hasil evaluasi backend (retained)
 ├── command/ping              # Perintah periksa lokasi anak
 ├── command/alarm             # Perintah memicu sirine darurat pada HP anak
@@ -185,9 +186,9 @@ Seluruh antarmuka web sistem isDugem telah di-deploy secara publik menggunakan p
    >   pip install -r requirements.txt
    >   ```
 2. **Buka Aplikasi pada 2 Ponsel dan 1 Laptop:**
-   - Buka `/anak` pada HP pertama (klik **Mulai Sensor & Telemetri**).
-   - Buka `/ortu` pada HP kedua (klik **Aktifkan Sensor Shake-to-Ping**).
-   - Buka halaman utama `/` pada laptop sebagai dashboard pemantau.
+   - Buka `/anak` pada HP pertama (klik **Mulai Sensor & Telemetri** untuk mengaktifkan 3 sensor: GPS, Mikrofon, Akselerometer).
+   - Buka `/ortu` pada HP kedua (klik **Mulai Sensor GPS & Shake-to-Ping** untuk mengaktifkan 2 sensor: GPS dan Akselerometer).
+   - Buka halaman utama `/` pada laptop sebagai dashboard pemantau, dan perhatikan posisi GPS Anak serta GPS Orang Tua tampil secara real-time di kedua HP dan peta Dashboard.
 3. **Uji Skenario Anomali Fake GPS:**
    - Pada HP Anak, tekan **Kunci di Kos Mulawarman** dan pilih **Simulasi Jam Malam (23:00 WIB)**.
    - Perhatikan status awal: sistem membaca kondisi tenang sebagai **ISTIRAHAT DI KOS**.
@@ -239,7 +240,7 @@ Proyek **isDugem** dikembangkan oleh:
 |---|---|---|
 | **Fallah Iqbal Kurnianto** | `24060125130065` | **Pengembang Dashboard**<br>Arsitektur UI/UX Dashboard Next.js, integrasi peta Leaflet, visualisasi data audio & grafik riwayat, panel kontrol simulasi preset, dan tata kelola deployment Vercel. |
 | **Raditya Arganta Anantio** | `24060125120021` | **Pengembang Backend & Algoritma**<br>Perancangan Server Decision Engine Python, implementasi formula jarak Haversine, konversi RMS desibel, pengujian unit Pytest (169 skenario), dan arsitektur topik MQTT. |
-| **Wendi Adi Ardiansah** | `24060125120027` | **Pengembang Edge Device**<br>Pengembangan modul web sensor HP Anak (Web Audio API desibel, Geolocation API, akselerometer), modul remote HP Orang Tua (Shake-to-Ping), dan optimasi latensi telemetri. |
+| **Wendi Adi Ardiansah** | `24060125120027` | **Pengembang Edge Device**<br>Pengembangan modul web 3 sensor HP Anak (Web Audio API desibel, Geolocation API, akselerometer) serta 2 sensor HP Orang Tua (Geolocation API GPS live, akselerometer Shake-to-Ping), dan optimasi latensi telemetri. |
 
 ---
 

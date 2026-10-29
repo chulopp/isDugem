@@ -131,16 +131,28 @@ export const MACRO_ZONES = [
 ];
 
 export function getRealtimeTimeLabel(date: Date = new Date()): TimeLabel {
-  const hour = date.getHours();
-  if ((hour >= 8 && hour < 12) || (hour >= 13 && hour < 16)) {
-    return "jam_kuliah";
-  }
-  if (hour === 12 || hour === 18 || hour === 19) {
+  const totalMinutes = date.getHours() * 60 + date.getMinutes();
+
+  // 1. Waktu Sholat: 12:00-12:45, 15:15-15:45, 18:00-18:30, 19:15-19:45
+  const inSholat =
+    (totalMinutes >= 12 * 60 && totalMinutes < 12 * 60 + 45) ||
+    (totalMinutes >= 15 * 60 + 15 && totalMinutes < 15 * 60 + 45) ||
+    (totalMinutes >= 18 * 60 && totalMinutes < 18 * 60 + 30) ||
+    (totalMinutes >= 19 * 60 + 15 && totalMinutes < 19 * 60 + 45);
+  if (inSholat) {
     return "waktu_sholat";
   }
-  if (hour >= 22 || hour < 4) {
+
+  // 2. Jam Malam: 22:00-05:00
+  if (totalMinutes >= 22 * 60 || totalMinutes < 5 * 60) {
     return "jam_malam";
   }
+
+  // 3. Jam Kuliah: 08:00-15:00
+  if (totalMinutes >= 8 * 60 && totalMinutes < 15 * 60) {
+    return "jam_kuliah";
+  }
+
   return "lainnya";
 }
 

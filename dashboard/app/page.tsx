@@ -663,6 +663,7 @@ export default function DashboardPage() {
             <>
               <MapPanel
                 telemetry={latestTelemetry}
+                ortuTelemetry={latestOrtuTelemetry}
                 alert={latestAlert}
                 trailCoords={trailCoords}
                 activeRouteCoords={activeRouteCoords}
@@ -685,6 +686,7 @@ export default function DashboardPage() {
           {activeTab === "map" && (
             <MapPanel
               telemetry={latestTelemetry}
+              ortuTelemetry={latestOrtuTelemetry}
               alert={latestAlert}
               trailCoords={trailCoords}
               activeRouteCoords={activeRouteCoords}
@@ -715,6 +717,7 @@ export default function DashboardPage() {
               />
               <MapPanel
                 telemetry={latestTelemetry}
+                ortuTelemetry={latestOrtuTelemetry}
                 alert={latestAlert}
                 trailCoords={trailCoords}
                 activeRouteCoords={activeRouteCoords}

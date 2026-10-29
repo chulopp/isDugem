@@ -10,10 +10,16 @@ import {
   Square,
   BellRing,
   Clock,
+  Navigation,
+  Radio,
 } from "lucide-react";
 import { useMqtt } from "@/hooks/useMqtt";
-import { MQTT_TOPICS, POI_SPOTS } from "@/lib/mqttTopics";
-import { AnakTelemetry, TimeMode } from "@/lib/types";
+import {
+  MQTT_TOPICS,
+  POI_SPOTS,
+  haversineDistanceM,
+} from "@/lib/mqttTopics";
+import { AnakTelemetry, OrtuTelemetry, TimeMode } from "@/lib/types";
 import { getSimulatedTimestampMs } from "@/lib/mockData";
 
 function playAlertTone(isAlarm: boolean) {
@@ -60,7 +66,7 @@ export default function AnakEdgePage() {
   const [sensorActive, setSensorActive] = useState(false);
   const [sequence, setSequence] = useState(0);
 
-  // State Sensor
+  // State Sensor Anak (3 Sensor: GPS, Mikrofon, Akselerometer)
   const [gpsCoords, setGpsCoords] = useState({
     lat: -7.0502,
     lon: 110.4398,
@@ -68,6 +74,9 @@ export default function AnakEdgePage() {
   });
   const [audioData, setAudioData] = useState({ rms: 0.012, db: 48.0 });
   const [accelMag, setAccelMag] = useState(9.8);
+
+  // Telemetri Lokasi & Gerak Orang Tua dari MQTT
+  const [latestOrtu, setLatestOrtu] = useState<OrtuTelemetry | null>(null);
 
   // Mode Kunci Koordinat Demo ("gps_asli" atau id dari POI_SPOTS)
   const [lockedSpotId, setLockedSpotId] = useState<string>("gps_asli");
@@ -119,6 +128,9 @@ export default function AnakEdgePage() {
       if (payload.sequence && payload.sequence > stateRef.current.seq) {
         stateRef.current.seq = payload.sequence;
       }
+    },
+    onOrtuTelemetry: (payload) => {
+      setLatestOrtu(payload);
     },
     onCommand: (topic, payload: any) => {
       const cmdType = topic.split("/").pop()?.toUpperCase() || "";
@@ -283,6 +295,27 @@ export default function AnakEdgePage() {
 
     // 1. Geolocation API (Memakai stateRef.current.lockedSpotId agar tidak terkena stale closure)
     if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lon = Number(pos.coords.longitude.toFixed(6));
+          const acc = Number((pos.coords.accuracy || 8).toFixed(1));
+          stateRef.current.realLat = lat;
+          stateRef.current.realLon = lon;
+          stateRef.current.realAcc = acc;
+
+          if (stateRef.current.lockedSpotId === "gps_asli") {
+            stateRef.current.lat = lat;
+            stateRef.current.lon = lon;
+            stateRef.current.accuracy_m = acc;
+            setGpsCoords({ lat, lon, accuracy_m: acc });
+            publishTelemetryNowRef.current();
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
           const lat = Number(pos.coords.latitude.toFixed(6));
@@ -467,6 +500,17 @@ export default function AnakEdgePage() {
 
   const dbPercent = Math.min(100, Math.max(5, Math.round(audioData.db)));
 
+  const distanceToOrtuM = latestOrtu
+    ? Math.round(
+        haversineDistanceM(
+          gpsCoords.lat,
+          gpsCoords.lon,
+          latestOrtu.location.lat,
+          latestOrtu.location.lon
+        )
+      )
+    : null;
+
   return (
     <div className="min-h-screen bg-[#ECEFF4] p-4 flex items-center justify-center">
       <div className="w-full max-w-md rounded-[32px] bg-white/90 backdrop-blur-2xl border border-white shadow-glass p-6 space-y-5">
@@ -529,7 +573,7 @@ export default function AnakEdgePage() {
           </div>
         )}
 
-        {/* 2. Kartu Sensor Utama */}
+        {/* 2. Kartu Sensor Utama Anak (3 Sensor: GPS, Mikrofon, Akselerometer) */}
         <div className="p-5 rounded-3xl bg-slate-50/90 border border-slate-200/80 space-y-4">
           <button
             onClick={sensorActive ? stopSensors : startSensors}
@@ -584,7 +628,7 @@ export default function AnakEdgePage() {
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
                 <span>Koordinat</span>
               </div>
-              <p className="text-xs font-bold font-mono text-slate-900 truncate">
+              <p className="text-[11px] font-bold font-mono text-slate-900 whitespace-nowrap">
                 {gpsCoords.lat.toFixed(4)}, {gpsCoords.lon.toFixed(4)}
               </p>
               <p className="text-[10px] text-slate-400 mt-0.5">
@@ -605,7 +649,67 @@ export default function AnakEdgePage() {
           </div>
         </div>
 
-        {/* 3. Kartu Kunci Lokasi Demo (Coordinate Lock) */}
+        {/* 3. Kartu Lokasi & Status Orang Tua (Real-time dari GPS Edge Ortu) */}
+        <div className="p-5 rounded-3xl bg-slate-50/90 border border-slate-200/80 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+              <Radio className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>Lokasi & Status Orang Tua</span>
+            </span>
+            <span
+              className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border shrink-0 ${
+                latestOrtu
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-white text-slate-500 border-slate-200"
+              }`}
+            >
+              {latestOrtu ? "GPS Ortu Aktif" : "Menunggu HP Ortu"}
+            </span>
+          </div>
+
+          {latestOrtu ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-2xl bg-white border border-slate-200/70">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 mb-1">
+                  <MapPin className="w-3 h-3 text-indigo-600" />
+                  <span>Koordinat Ortu</span>
+                </div>
+                <p className="text-[11px] font-bold font-mono text-slate-900 whitespace-nowrap">
+                  {latestOrtu.location.lat.toFixed(4)},{" "}
+                  {latestOrtu.location.lon.toFixed(4)}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Akurasi ±{latestOrtu.location.accuracy_m ?? 8} m
+                </p>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-white border border-slate-200/70">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 mb-1">
+                  <Navigation className="w-3 h-3 text-indigo-600" />
+                  <span>Jarak ke Ortu</span>
+                </div>
+                <p className="text-xs font-bold text-slate-900">
+                  {distanceToOrtuM !== null
+                    ? distanceToOrtuM >= 1000
+                      ? `${(distanceToOrtuM / 1000).toFixed(2)} km`
+                      : `${distanceToOrtuM} m`
+                    : "0 m"}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {latestOrtu.motion.shake_detected
+                    ? "Menggoyangkan HP!"
+                    : `Gerak ${latestOrtu.motion.accel_magnitude.toFixed(1)} m/s²`}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-200/70 text-xs text-slate-500 text-center">
+              Buka halaman <span className="font-mono font-semibold text-slate-700">/ortu</span> dan aktifkan sensor untuk melihat posisi GPS orang tua secara real-time.
+            </div>
+          )}
+        </div>
+
+        {/* 4. Kartu Kunci Lokasi Demo (Coordinate Lock) */}
         <div className="p-5 rounded-3xl bg-slate-50/90 border border-slate-200/80 space-y-3">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
@@ -650,7 +754,7 @@ export default function AnakEdgePage() {
           </div>
         </div>
 
-        {/* 4. Kartu Kunci Waktu Demo */}
+        {/* 5. Kartu Kunci Waktu Demo */}
         <div className="p-5 rounded-3xl bg-slate-50/90 border border-slate-200/80 space-y-3">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
