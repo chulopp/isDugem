@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   MapPin,
   Mic,
@@ -23,37 +23,32 @@ import { AnakTelemetry, OrtuTelemetry, TimeMode } from "@/lib/types";
 import { getSimulatedTimestampMs } from "@/lib/mockData";
 import { createSpeedTracker } from "@/lib/speed";
 
-function playAlertTone(isAlarm: boolean) {
-  try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = isAlarm ? "sawtooth" : "sine";
-    osc.frequency.setValueAtTime(isAlarm ? 880 : 587.33, ctx.currentTime);
-    if (isAlarm) {
-      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.25);
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.5);
-    }
-
-    gain.gain.setValueAtTime(0.18, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(
-      0.001,
-      ctx.currentTime + (isAlarm ? 0.9 : 0.45)
-    );
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + (isAlarm ? 0.9 : 0.45));
-  } catch {
-    // Ignore audio play restriction
-  }
+interface WakeLockSentinelLike {
+  released?: boolean;
+  release: () => Promise<void>;
+  addEventListener?: (type: string, listener: () => void) => void;
+  removeEventListener?: (type: string, listener: () => void) => void;
 }
+
+interface PerformanceMemoryLike {
+  usedJSHeapSize: number;
+  totalJSHeapSize?: number;
+  jsHeapSizeLimit?: number;
+}
+
+interface DebugSnapshot {
+  sentCount: number;
+  avgIntervalMs: number | null;
+  maxGapMs: number;
+  sessionElapsedS: number;
+  heapUsedMb: number | null;
+  speedMps: number;
+  nativeSpeed: number | null;
+  lastAccuracyM: number;
+  gpsFixAgeS: number | null;
+}
+
+const SESSION_TARGET_S = 30 * 60; // 30 menit target sesi uji stabilitas
 
 function getAudioZone(db: number): number {
   if (db < 55.0) return 0;
@@ -61,6 +56,13 @@ function getAudioZone(db: number): number {
   if (db <= 75.0) return 2;
   if (db <= 80.0) return 3;
   return 4;
+}
+
+function formatDurationMmSs(totalSeconds: number): string {
+  const clamped = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(clamped / 60);
+  const s = clamped % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 export default function AnakEdgePage() {
@@ -76,6 +78,10 @@ export default function AnakEdgePage() {
   const [audioData, setAudioData] = useState({ rms: 0.012, db: 48.0 });
   const [accelMag, setAccelMag] = useState(9.8);
   const [speedMps, setSpeedMps] = useState(0);
+
+  // Status izin mikrofon & Wake Lock
+  const [micErrorNotice, setMicErrorNotice] = useState<string | null>(null);
+  const [wakeLockActive, setWakeLockActive] = useState(false);
 
   // Telemetri Lokasi & Gerak Orang Tua dari MQTT
   const [latestOrtu, setLatestOrtu] = useState<OrtuTelemetry | null>(null);
@@ -94,6 +100,20 @@ export default function AnakEdgePage() {
     time: string;
   } | null>(null);
 
+  // Panel Diagnostik (?debug=1)
+  const [isDebugMode, setIsDebugMode] = useState(false);
+  const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot>({
+    sentCount: 0,
+    avgIntervalMs: null,
+    maxGapMs: 0,
+    sessionElapsedS: 0,
+    heapUsedMb: null,
+    speedMps: 0,
+    nativeSpeed: null,
+    lastAccuracyM: 8.0,
+    gpsFixAgeS: null,
+  });
+
   const stateRef = useRef({
     lat: -7.0502,
     lon: 110.4398,
@@ -102,6 +122,7 @@ export default function AnakEdgePage() {
     realLon: 110.4398,
     realAcc: 8.0,
     nativeSpeed: null as number | null,
+    lastGpsFixReceivedMs: null as number | null,
     rms: 0.012,
     db: 48.0,
     accel: 9.8,
@@ -114,6 +135,16 @@ export default function AnakEdgePage() {
     presetDbLockUntilMs: 0,
   });
 
+  // Ring buffer ukuran tetap (maksimal 10 interval publish terakhir) & agregat berjalan
+  const diagStatsRef = useRef({
+    sessionStartMs: null as number | null,
+    intervalsRing: new Float64Array(10),
+    ringIndex: 0,
+    ringCount: 0,
+    maxGapMs: 0,
+    lastUiUpdateMs: 0,
+  });
+
   const lastPublishMsRef = useRef<number>(0);
   const lastPublishedDbRef = useRef<number>(48.0);
   const lastPublishedZoneRef = useRef<number>(getAudioZone(48.0));
@@ -121,23 +152,160 @@ export default function AnakEdgePage() {
   const speedTrackerRef = useRef(createSpeedTracker());
   const lastSpeedUiUpdateMsRef = useRef<number>(0);
 
+  // Guard anti-reentrancy untuk startSensors/stopSensors
+  const sensorRunningRef = useRef<boolean>(false);
+  const sensorStartingRef = useRef<boolean>(false);
+
+  // Refs untuk resource hardware, timer, dan AudioContext bersama
   const watchIdRef = useRef<number | null>(null);
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pubIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const alertAudioCtxRef = useRef<AudioContext | null>(null);
+  const timeSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
 
-  const { isConnected, publishRaw } = useMqtt({
-    onAnakTelemetry: (payload) => {
-      if (payload.sequence && payload.sequence > stateRef.current.seq) {
-        stateRef.current.seq = payload.sequence;
+  // Deteksi ?debug=1 dari window.location.search di dalam useEffect (tanpa useSearchParams/Suspense)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setIsDebugMode(params.get("debug") === "1");
+    }
+  }, []);
+
+  // Satu AudioContext bersama (lazy) untuk nada peringatan masuk
+  const playAlertTone = useCallback((isAlarm: boolean) => {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AudioCtx) return;
+
+      let ctx = alertAudioCtxRef.current;
+      if (!ctx || ctx.state === "closed") {
+        ctx = new AudioCtx();
+        alertAudioCtxRef.current = ctx;
       }
-    },
-    onOrtuTelemetry: (payload) => {
-      setLatestOrtu(payload);
-    },
-    onCommand: (topic, payload: any) => {
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const duration = isAlarm ? 0.9 : 0.45;
+      const now = ctx.currentTime;
+
+      osc.type = isAlarm ? "sawtooth" : "sine";
+      osc.frequency.setValueAtTime(isAlarm ? 880 : 587.33, now);
+      if (isAlarm) {
+        osc.frequency.setValueAtTime(660, now + 0.25);
+        osc.frequency.setValueAtTime(880, now + 0.5);
+      }
+
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+        } catch {
+          // Ignore disconnect error
+        }
+        try {
+          gain.disconnect();
+        } catch {
+          // Ignore disconnect error
+        }
+      };
+
+      osc.start(now);
+      osc.stop(now + duration);
+    } catch {
+      // Ignore audio play restriction
+    }
+  }, []);
+
+  const acquireWakeLock = useCallback(async () => {
+    if (typeof navigator === "undefined" || !("wakeLock" in navigator)) {
+      return;
+    }
+    try {
+      if (wakeLockRef.current && !wakeLockRef.current.released) {
+        setWakeLockActive(true);
+        return;
+      }
+      const wakeLockApi = (
+        navigator as Navigator & {
+          wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> };
+        }
+      ).wakeLock;
+      if (!wakeLockApi) return;
+
+      const sentinel = await wakeLockApi.request("screen");
+      if (!sensorRunningRef.current) {
+        await sentinel.release().catch(() => {});
+        return;
+      }
+      wakeLockRef.current = sentinel;
+      setWakeLockActive(true);
+      sentinel.addEventListener?.("release", () => {
+        if (wakeLockRef.current === sentinel) {
+          wakeLockRef.current = null;
+          setWakeLockActive(false);
+        }
+      });
+    } catch {
+      setWakeLockActive(false);
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(async () => {
+    const sentinel = wakeLockRef.current;
+    wakeLockRef.current = null;
+    setWakeLockActive(false);
+    if (sentinel) {
+      try {
+        await sentinel.release();
+      } catch {
+        // Ignore release error
+      }
+    }
+  }, []);
+
+  // Re-acquire Wake Lock saat tab kembali visible jika sensor masih aktif
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        sensorRunningRef.current
+      ) {
+        acquireWakeLock();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [acquireWakeLock]);
+
+  const handleAnakTelemetry = useCallback((payload: AnakTelemetry) => {
+    if (payload.sequence && payload.sequence > stateRef.current.seq) {
+      stateRef.current.seq = payload.sequence;
+    }
+  }, []);
+
+  const handleOrtuTelemetry = useCallback((payload: OrtuTelemetry) => {
+    setLatestOrtu(payload);
+  }, []);
+
+  const handleCommand = useCallback(
+    (topic: string, payload: any) => {
       const cmdType = topic.split("/").pop()?.toUpperCase() || "";
 
       // Sinkronisasi Mode Waktu & Lokasi dari Dashboard
@@ -175,7 +343,9 @@ export default function AnakEdgePage() {
 
         if (typeof payload.db === "number") {
           const targetDb = Number(payload.db.toFixed(1));
-          const targetRms = Number(Math.pow(10, (targetDb - 100) / 20).toFixed(6));
+          const targetRms = Number(
+            Math.pow(10, (targetDb - 100) / 20).toFixed(6)
+          );
           stateRef.current.db = targetDb;
           stateRef.current.rms = targetRms;
           stateRef.current.peakDb = targetDb;
@@ -184,8 +354,16 @@ export default function AnakEdgePage() {
         }
 
         if (notices.length > 0) {
-          setTimeSyncNotice(`Disinkronkan dari Dashboard: ${notices.join(" | ")}`);
-          setTimeout(() => setTimeSyncNotice(null), 4000);
+          if (timeSyncTimerRef.current) {
+            clearTimeout(timeSyncTimerRef.current);
+          }
+          setTimeSyncNotice(
+            `Disinkronkan dari Dashboard: ${notices.join(" | ")}`
+          );
+          timeSyncTimerRef.current = setTimeout(() => {
+            setTimeSyncNotice(null);
+            timeSyncTimerRef.current = null;
+          }, 4000);
         }
 
         publishTelemetryNowRef.current();
@@ -208,7 +386,19 @@ export default function AnakEdgePage() {
         }),
       });
     },
-  });
+    [playAlertTone]
+  );
+
+  const mqttHandlers = useMemo(
+    () => ({
+      onAnakTelemetry: handleAnakTelemetry,
+      onOrtuTelemetry: handleOrtuTelemetry,
+      onCommand: handleCommand,
+    }),
+    [handleAnakTelemetry, handleOrtuTelemetry, handleCommand]
+  );
+
+  const { isConnected, publishRaw } = useMqtt(mqttHandlers);
 
   const publishTelemetryNow = useCallback(() => {
     if (stateRef.current.lockedSpotId !== "gps_asli") {
@@ -222,15 +412,31 @@ export default function AnakEdgePage() {
       }
     }
 
+    const nowMs = Date.now();
+    const prevPubMs = lastPublishMsRef.current;
+
+    if (prevPubMs > 0 && diagStatsRef.current.sessionStartMs !== null) {
+      const deltaMs = nowMs - prevPubMs;
+      const ring = diagStatsRef.current;
+      ring.intervalsRing[ring.ringIndex] = deltaMs;
+      ring.ringIndex = (ring.ringIndex + 1) % 10;
+      if (ring.ringCount < 10) {
+        ring.ringCount += 1;
+      }
+      if (deltaMs > ring.maxGapMs) {
+        ring.maxGapMs = deltaMs;
+      }
+    }
+
     const nextSeq = Math.max(
       stateRef.current.seq + 1,
-      Math.floor(Date.now() / 200)
+      Math.floor(nowMs / 200)
     );
     stateRef.current.seq = nextSeq;
     stateRef.current.localCount += 1;
     setSequence(stateRef.current.localCount);
 
-    let sentAtMs = Date.now();
+    let sentAtMs = nowMs;
     if (stateRef.current.timeMode !== "auto") {
       sentAtMs = getSimulatedTimestampMs(stateRef.current.timeMode, nextSeq);
     }
@@ -239,7 +445,6 @@ export default function AnakEdgePage() {
       Math.pow(10, (stateRef.current.db - 100) / 20).toFixed(6)
     );
 
-    const nowMs = Date.now();
     const speed_mps =
       stateRef.current.lockedSpotId !== "gps_asli"
         ? 0
@@ -248,6 +453,59 @@ export default function AnakEdgePage() {
     if (nowMs - lastSpeedUiUpdateMsRef.current >= 1000) {
       lastSpeedUiUpdateMsRef.current = nowMs;
       setSpeedMps(speed_mps);
+    }
+
+    // Update panel debug maksimal 1x per detik
+    if (nowMs - diagStatsRef.current.lastUiUpdateMs >= 1000) {
+      diagStatsRef.current.lastUiUpdateMs = nowMs;
+      const ring = diagStatsRef.current;
+      let avgIntervalMs: number | null = null;
+      if (ring.ringCount > 0) {
+        let sum = 0;
+        for (let i = 0; i < ring.ringCount; i++) {
+          sum += ring.intervalsRing[i];
+        }
+        avgIntervalMs = Math.round(sum / ring.ringCount);
+      }
+
+      const sessionElapsedS =
+        ring.sessionStartMs !== null
+          ? Math.max(0, Math.floor((nowMs - ring.sessionStartMs) / 1000))
+          : 0;
+
+      const perfMem =
+        typeof performance !== "undefined"
+          ? (
+              performance as Performance & {
+                memory?: PerformanceMemoryLike;
+              }
+            ).memory
+          : undefined;
+      const heapUsedMb =
+        perfMem && typeof perfMem.usedJSHeapSize === "number"
+          ? Number((perfMem.usedJSHeapSize / (1024 * 1024)).toFixed(2))
+          : null;
+
+      const gpsFixAgeS =
+        stateRef.current.lastGpsFixReceivedMs !== null
+          ? Number(
+              ((nowMs - stateRef.current.lastGpsFixReceivedMs) / 1000).toFixed(
+                1
+              )
+            )
+          : null;
+
+      setDebugSnapshot({
+        sentCount: stateRef.current.localCount,
+        avgIntervalMs,
+        maxGapMs: Math.round(ring.maxGapMs),
+        sessionElapsedS,
+        heapUsedMb,
+        speedMps: speed_mps,
+        nativeSpeed: stateRef.current.nativeSpeed,
+        lastAccuracyM: stateRef.current.realAcc,
+        gpsFixAgeS,
+      });
     }
 
     const payload: AnakTelemetry = {
@@ -280,6 +538,9 @@ export default function AnakEdgePage() {
   }, [publishTelemetryNow]);
 
   const stopSensors = useCallback(() => {
+    sensorRunningRef.current = false;
+    sensorStartingRef.current = false;
+
     if (watchIdRef.current !== null && "geolocation" in navigator) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -304,14 +565,17 @@ export default function AnakEdgePage() {
       window.removeEventListener("devicemotion", motionHandlerRef.current);
       motionHandlerRef.current = null;
     }
+    releaseWakeLock();
     speedTrackerRef.current.reset();
     lastSpeedUiUpdateMsRef.current = 0;
+    diagStatsRef.current.sessionStartMs = null;
     setSpeedMps(0);
     setSensorActive(false);
-  }, []);
+  }, [releaseWakeLock]);
 
   const handlePosition = useCallback(
     (pos: GeolocationPosition, isInitial: boolean = false) => {
+      const nowMs = Date.now();
       const lat = Number(pos.coords.latitude.toFixed(6));
       const lon = Number(pos.coords.longitude.toFixed(6));
       const acc = Number((pos.coords.accuracy || 8).toFixed(1));
@@ -319,6 +583,7 @@ export default function AnakEdgePage() {
       stateRef.current.realLon = lon;
       stateRef.current.realAcc = acc;
       stateRef.current.nativeSpeed = pos.coords.speed ?? null;
+      stateRef.current.lastGpsFixReceivedMs = nowMs;
 
       speedTrackerRef.current.update(
         {
@@ -327,7 +592,7 @@ export default function AnakEdgePage() {
           accuracy_m: acc,
           timestamp_ms: pos.timestamp,
         },
-        Date.now(),
+        nowMs,
         stateRef.current.nativeSpeed
       );
 
@@ -345,7 +610,24 @@ export default function AnakEdgePage() {
   );
 
   const startSensors = async () => {
+    // Guard berbasis ref agar tap cepat dua kali tidak membuat interval/stream ganda
+    if (sensorRunningRef.current || sensorStartingRef.current) {
+      return;
+    }
+    sensorStartingRef.current = true;
+    sensorRunningRef.current = true;
     setSensorActive(true);
+    setMicErrorNotice(null);
+
+    const startMs = Date.now();
+    lastPublishMsRef.current = 0;
+    diagStatsRef.current.sessionStartMs = startMs;
+    diagStatsRef.current.ringIndex = 0;
+    diagStatsRef.current.ringCount = 0;
+    diagStatsRef.current.maxGapMs = 0;
+    diagStatsRef.current.lastUiUpdateMs = 0;
+
+    acquireWakeLock();
 
     // 1. Geolocation API (Memakai stateRef.current.lockedSpotId agar tidak terkena stale closure)
     if ("geolocation" in navigator) {
@@ -355,6 +637,9 @@ export default function AnakEdgePage() {
         { enableHighAccuracy: true, timeout: 5000 }
       );
 
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => handlePosition(pos, false),
         () => {
@@ -366,7 +651,15 @@ export default function AnakEdgePage() {
 
     // 2. Web Audio API (Mikrofon Asli dengan Peak Hold & Instant Trigger)
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("MediaDevices API tidak tersedia");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!sensorRunningRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        sensorStartingRef.current = false;
+        return;
+      }
       audioStreamRef.current = stream;
       const AudioCtx =
         window.AudioContext ||
@@ -380,6 +673,9 @@ export default function AnakEdgePage() {
       source.connect(analyser);
 
       const dataArr = new Float32Array(analyser.fftSize);
+      if (audioIntervalRef.current) {
+        clearInterval(audioIntervalRef.current);
+      }
       audioIntervalRef.current = setInterval(() => {
         analyser.getFloatTimeDomainData(dataArr);
         let sumSq = 0;
@@ -424,28 +720,46 @@ export default function AnakEdgePage() {
 
         const currentZone = getAudioZone(effectiveDb);
         const zoneChanged = currentZone !== lastPublishedZoneRef.current;
-        const dbJump = Math.abs(effectiveDb - lastPublishedDbRef.current) >= 6.0;
+        const dbJump =
+          Math.abs(effectiveDb - lastPublishedDbRef.current) >= 6.0;
 
-        if ((zoneChanged || dbJump) && nowMs - lastPublishMsRef.current >= 250) {
+        if (
+          (zoneChanged || dbJump) &&
+          nowMs - lastPublishMsRef.current >= 250
+        ) {
           publishTelemetryNowRef.current();
         }
       }, 200);
     } catch {
-      // Fallback jika mikrofon ditolak
+      // Tampilkan pesan kecil di UI tanpa menghentikan GPS dan telemetri
+      setMicErrorNotice(
+        "Akses mikrofon ditolak/tidak tersedia — GPS & telemetri tetap berjalan dengan nilai dB terakhir."
+      );
     }
 
     // 3. DeviceMotion API (Accelerometer)
     if (typeof window !== "undefined" && "DeviceMotionEvent" in window) {
       if (
-        typeof (DeviceMotionEvent as unknown as { requestPermission?: () => Promise<string> })
-          .requestPermission === "function"
+        typeof (
+          DeviceMotionEvent as unknown as {
+            requestPermission?: () => Promise<string>;
+          }
+        ).requestPermission === "function"
       ) {
         try {
-          await (DeviceMotionEvent as unknown as { requestPermission: () => Promise<string> })
-            .requestPermission();
+          await (
+            DeviceMotionEvent as unknown as {
+              requestPermission: () => Promise<string>;
+            }
+          ).requestPermission();
         } catch {
           // Abaikan jika izin iOS ditolak
         }
+      }
+
+      if (!sensorRunningRef.current) {
+        sensorStartingRef.current = false;
+        return;
       }
 
       const onMotion = (ev: DeviceMotionEvent) => {
@@ -467,16 +781,39 @@ export default function AnakEdgePage() {
       window.addEventListener("devicemotion", onMotion);
     }
 
+    if (!sensorRunningRef.current) {
+      sensorStartingRef.current = false;
+      return;
+    }
+
     publishTelemetryNow();
 
     // 4. Interval Pengiriman Telemetri MQTT Real-Time (Tiap 1 detik)
+    if (pubIntervalRef.current) {
+      clearInterval(pubIntervalRef.current);
+    }
     pubIntervalRef.current = setInterval(() => {
       publishTelemetryNowRef.current();
     }, 1000);
+
+    sensorStartingRef.current = false;
   };
 
   useEffect(() => {
-    return () => stopSensors();
+    return () => {
+      stopSensors();
+      if (timeSyncTimerRef.current) {
+        clearTimeout(timeSyncTimerRef.current);
+        timeSyncTimerRef.current = null;
+      }
+      if (
+        alertAudioCtxRef.current &&
+        alertAudioCtxRef.current.state !== "closed"
+      ) {
+        alertAudioCtxRef.current.close().catch(() => {});
+        alertAudioCtxRef.current = null;
+      }
+    };
   }, [stopSensors]);
 
   const handleSelectLocationLock = (spotId: string) => {
@@ -536,6 +873,11 @@ export default function AnakEdgePage() {
       )
     : null;
 
+  const remainingSessionS = Math.max(
+    0,
+    SESSION_TARGET_S - debugSnapshot.sessionElapsedS
+  );
+
   return (
     <div className="min-h-screen bg-[#ECEFF4] p-3 sm:p-4 py-5 sm:py-8 flex flex-col justify-start sm:justify-center items-center">
       <div className="w-full max-w-md rounded-[28px] sm:rounded-[32px] bg-white/90 backdrop-blur-2xl border border-white shadow-glass p-4 sm:p-6 space-y-4 sm:space-y-5 my-auto">
@@ -552,20 +894,27 @@ export default function AnakEdgePage() {
             </span>
           </div>
 
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-semibold border shrink-0 ${
-              isConnected
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                : "bg-amber-50 text-amber-700 border-amber-200"
-            }`}
-          >
+          <div className="flex items-center gap-1.5 shrink-0">
+            {wakeLockActive && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                Layar dijaga aktif
+              </span>
+            )}
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-semibold border shrink-0 ${
+                isConnected
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200"
               }`}
-            />
-            {isConnected ? "Terhubung" : "Menunggu"}
-          </span>
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                }`}
+              />
+              {isConnected ? "Terhubung" : "Menunggu"}
+            </span>
+          </div>
         </div>
 
         {/* Banner Sinkronisasi dari Dashboard */}
@@ -644,6 +993,11 @@ export default function AnakEdgePage() {
                 }`}
               />
             </div>
+            {micErrorNotice && (
+              <p className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200/80 rounded-xl px-2.5 py-1.5 leading-snug">
+                {micErrorNotice}
+              </p>
+            )}
           </div>
 
           {/* Indikator Lokasi & Gerak */}
@@ -733,7 +1087,12 @@ export default function AnakEdgePage() {
             </div>
           ) : (
             <div className="p-3.5 rounded-2xl bg-white border border-slate-200/70 text-xs text-slate-500 text-center leading-relaxed">
-              Buka halaman <span className="font-mono font-semibold text-slate-700">/ortu</span> dan aktifkan sensor untuk melihat posisi GPS orang tua secara real-time.
+              Buka halaman{" "}
+              <span className="font-mono font-semibold text-slate-700">
+                /ortu
+              </span>{" "}
+              dan aktifkan sensor untuk melihat posisi GPS orang tua secara
+              real-time.
             </div>
           )}
         </div>
@@ -760,7 +1119,9 @@ export default function AnakEdgePage() {
               }`}
             >
               <span className="truncate mr-2">Gunakan GPS Asli HP</span>
-              <span className="text-[10px] opacity-75 shrink-0">Sensor Hardware</span>
+              <span className="text-[10px] opacity-75 shrink-0">
+                Sensor Hardware
+              </span>
             </button>
 
             {POI_SPOTS.map((spot) => {
@@ -776,7 +1137,9 @@ export default function AnakEdgePage() {
                   }`}
                 >
                   <span className="truncate mr-2">Kunci di {spot.name}</span>
-                  <span className="text-[10px] opacity-75 shrink-0">{spot.area}</span>
+                  <span className="text-[10px] opacity-75 shrink-0">
+                    {spot.area}
+                  </span>
                 </button>
               );
             })}
@@ -797,11 +1160,31 @@ export default function AnakEdgePage() {
 
           <div className="grid grid-cols-1 gap-1.5">
             {[
-              { id: "auto", label: "Otomatis (Ikuti Jam Asli HP)", badge: "Real-time" },
-              { id: "jam_kuliah", label: "Simulasi Jam Kuliah", badge: "09:00 WIB" },
-              { id: "waktu_sholat", label: "Simulasi Waktu Sholat", badge: "12:15 WIB" },
-              { id: "jam_malam", label: "Simulasi Jam Malam", badge: "23:00 WIB" },
-              { id: "lainnya", label: "Simulasi Jam Normal", badge: "16:00 WIB" },
+              {
+                id: "auto",
+                label: "Otomatis (Ikuti Jam Asli HP)",
+                badge: "Real-time",
+              },
+              {
+                id: "jam_kuliah",
+                label: "Simulasi Jam Kuliah",
+                badge: "09:00 WIB",
+              },
+              {
+                id: "waktu_sholat",
+                label: "Simulasi Waktu Sholat",
+                badge: "12:15 WIB",
+              },
+              {
+                id: "jam_malam",
+                label: "Simulasi Jam Malam",
+                badge: "23:00 WIB",
+              },
+              {
+                id: "lainnya",
+                label: "Simulasi Jam Normal",
+                badge: "16:00 WIB",
+              },
             ].map((opt) => {
               const isSelected = simulatedTimeMode === opt.id;
               return (
@@ -815,12 +1198,89 @@ export default function AnakEdgePage() {
                   }`}
                 >
                   <span className="truncate mr-2">{opt.label}</span>
-                  <span className="text-[10px] font-mono opacity-80 shrink-0">{opt.badge}</span>
+                  <span className="text-[10px] font-mono opacity-80 shrink-0">
+                    {opt.badge}
+                  </span>
                 </button>
               );
             })}
           </div>
         </div>
+
+        {/* 6. Panel Diagnostik Opsional (?debug=1) */}
+        {isDebugMode && (
+          <div className="p-4 sm:p-5 rounded-3xl bg-slate-900 text-slate-100 border border-slate-800 space-y-2.5 text-[11px] font-mono">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <span className="font-bold text-emerald-400">
+                PANEL DIAGNOSTIK (?debug=1)
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Update maks 1x/dtk
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              <div>
+                <span className="text-slate-400">Paket terkirim:</span>{" "}
+                <span className="font-bold">{debugSnapshot.sentCount}</span>
+              </div>
+              <div>
+                <span className="text-slate-400">Rata2 (10 pub):</span>{" "}
+                <span className="font-bold">
+                  {debugSnapshot.avgIntervalMs !== null
+                    ? `${debugSnapshot.avgIntervalMs} ms`
+                    : "-"}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Jeda maks:</span>{" "}
+                <span className="font-bold">{debugSnapshot.maxGapMs} ms</span>
+              </div>
+              <div>
+                <span className="text-slate-400">Sisa sesi (30m):</span>{" "}
+                <span className="font-bold">
+                  {formatDurationMmSs(remainingSessionS)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">speed_mps:</span>{" "}
+                <span className="font-bold text-sky-300">
+                  {debugSnapshot.speedMps.toFixed(2)} m/s
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">nativeSpeed:</span>{" "}
+                <span className="font-bold">
+                  {debugSnapshot.nativeSpeed !== null &&
+                  Number.isFinite(debugSnapshot.nativeSpeed)
+                    ? `${debugSnapshot.nativeSpeed.toFixed(2)} m/s`
+                    : "-"}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">accuracy_m GPS:</span>{" "}
+                <span className="font-bold">
+                  {debugSnapshot.lastAccuracyM.toFixed(1)} m
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Umur fix GPS:</span>{" "}
+                <span className="font-bold">
+                  {debugSnapshot.gpsFixAgeS !== null
+                    ? `${debugSnapshot.gpsFixAgeS.toFixed(1)} dtk`
+                    : "-"}
+                </span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-slate-400">JS Heap (Chrome):</span>{" "}
+                <span className="font-bold">
+                  {debugSnapshot.heapUsedMb !== null
+                    ? `${debugSnapshot.heapUsedMb.toFixed(2)} MB`
+                    : "Tidak tersedia"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
