@@ -20,8 +20,14 @@ import {
   haversineDistanceM,
 } from "@/lib/mqttTopics";
 import { AnakTelemetry, OrtuTelemetry, TimeMode } from "@/lib/types";
-import { getSimulatedTimestampMs } from "@/lib/mockData";
 import { createSpeedTracker } from "@/lib/speed";
+import {
+  computeConsistentRms,
+  resolveEffectiveSpeedMps,
+  resolveTelemetryTimestampMs,
+  SensorSnapshotInput,
+} from "@/lib/fieldRecorder";
+import FieldRecorder from "@/components/FieldRecorder";
 
 interface WakeLockSentinelLike {
   released?: boolean;
@@ -102,8 +108,10 @@ export default function AnakEdgePage() {
     time: string;
   } | null>(null);
 
-  // Panel Diagnostik (?debug=1)
+  // Panel Diagnostik (?debug=1) & Mode Perekaman (?record=1)
   const [isDebugMode, setIsDebugMode] = useState(false);
+  const [isRecordMode, setIsRecordMode] = useState(false);
+  const isDebugModeRef = useRef(false);
   const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot>({
     sentCount: 0,
     skippedCount: 0,
@@ -175,11 +183,14 @@ export default function AnakEdgePage() {
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
 
-  // Deteksi ?debug=1 dari window.location.search di dalam useEffect (tanpa useSearchParams/Suspense)
+  // Deteksi ?debug=1 dan ?record=1 dari window.location.search di dalam useEffect (tanpa useSearchParams/Suspense)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      setIsDebugMode(params.get("debug") === "1");
+      const debugOn = params.get("debug") === "1";
+      isDebugModeRef.current = debugOn;
+      setIsDebugMode(debugOn);
+      setIsRecordMode(params.get("record") === "1");
     }
   }, []);
 
@@ -456,19 +467,18 @@ export default function AnakEdgePage() {
     stateRef.current.localCount += 1;
     setSequence(stateRef.current.localCount);
 
-    let sentAtMs = nowMs;
-    if (stateRef.current.timeMode !== "auto") {
-      sentAtMs = getSimulatedTimestampMs(stateRef.current.timeMode, nextSeq);
-    }
-
-    const consistentRms = Number(
-      Math.pow(10, (stateRef.current.db - 100) / 20).toFixed(6)
+    const sentAtMs = resolveTelemetryTimestampMs(
+      stateRef.current.timeMode,
+      nextSeq,
+      nowMs
     );
 
-    const speed_mps =
-      stateRef.current.lockedSpotId !== "gps_asli"
-        ? 0
-        : speedTrackerRef.current.getSpeed(nowMs);
+    const consistentRms = computeConsistentRms(stateRef.current.db);
+
+    const speed_mps = resolveEffectiveSpeedMps(
+      stateRef.current.lockedSpotId,
+      speedTrackerRef.current.getSpeed(nowMs)
+    );
 
     if (nowMs - lastSpeedUiUpdateMsRef.current >= 1000) {
       lastSpeedUiUpdateMsRef.current = nowMs;
@@ -504,8 +514,11 @@ export default function AnakEdgePage() {
       diagStatsRef.current.skippedCount += 1;
     }
 
-    // Update panel debug maksimal 1x per detik
-    if (nowMs - diagStatsRef.current.lastUiUpdateMs >= 1000) {
+    // Update panel debug maksimal 1x per detik (hanya bila ?debug=1 aktif)
+    if (
+      isDebugModeRef.current &&
+      nowMs - diagStatsRef.current.lastUiUpdateMs >= 1000
+    ) {
       diagStatsRef.current.lastUiUpdateMs = nowMs;
       const ring = diagStatsRef.current;
       let avgIntervalMs: number | null = null;
@@ -607,16 +620,18 @@ export default function AnakEdgePage() {
     diagStatsRef.current.lastUiUpdateMs = 0;
     setSequence(0);
     setSpeedMps(0);
-    setDebugSnapshot((prev) => ({
-      ...prev,
-      sentCount: 0,
-      skippedCount: 0,
-      disconnectCount: 0,
-      avgIntervalMs: null,
-      maxGapMs: 0,
-      sessionElapsedS: 0,
-      speedMps: 0,
-    }));
+    if (isDebugModeRef.current) {
+      setDebugSnapshot((prev) => ({
+        ...prev,
+        sentCount: 0,
+        skippedCount: 0,
+        disconnectCount: 0,
+        avgIntervalMs: null,
+        maxGapMs: 0,
+        sessionElapsedS: 0,
+        speedMps: 0,
+      }));
+    }
     setSensorActive(false);
   }, [releaseWakeLock]);
 
@@ -928,6 +943,27 @@ export default function AnakEdgePage() {
     0,
     SESSION_TARGET_S - debugSnapshot.sessionElapsedS
   );
+
+  const getRecorderSnapshot = useCallback((): SensorSnapshotInput => {
+    const nowMs = Date.now();
+    const rawTrackerSpeed = speedTrackerRef.current.getSpeed(nowMs);
+    return {
+      lat: stateRef.current.lat,
+      lon: stateRef.current.lon,
+      accuracy_m: stateRef.current.accuracy_m,
+      db: stateRef.current.db,
+      accel_magnitude: stateRef.current.accel,
+      lockedSpotId: stateRef.current.lockedSpotId,
+      timeMode: stateRef.current.timeMode,
+      seq: stateRef.current.seq,
+      nowMs,
+      speed_mps: resolveEffectiveSpeedMps(
+        stateRef.current.lockedSpotId,
+        rawTrackerSpeed
+      ),
+      speed_native_mps: stateRef.current.nativeSpeed,
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#ECEFF4] p-3 sm:p-4 py-5 sm:py-8 flex flex-col justify-start sm:justify-center items-center">
@@ -1355,6 +1391,18 @@ export default function AnakEdgePage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* 7. Mode Perekaman Data Lapangan (?record=1) */}
+        {isRecordMode && (
+          <FieldRecorder
+            liveSource={{
+              sensorActive,
+              sessionStartMs: diagStatsRef.current.sessionStartMs,
+              lastGpsFixReceivedMs: stateRef.current.lastGpsFixReceivedMs,
+              getSnapshot: getRecorderSnapshot,
+            }}
+          />
         )}
       </div>
     </div>
