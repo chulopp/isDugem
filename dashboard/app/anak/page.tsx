@@ -22,6 +22,8 @@ import {
 import { AnakTelemetry, OrtuTelemetry, TimeMode } from "@/lib/types";
 import { createSpeedTracker } from "@/lib/speed";
 import {
+  AudioMode,
+  AudioSettingsSnapshot,
   computeConsistentRms,
   resolveEffectiveSpeedMps,
   resolveTelemetryTimestampMs,
@@ -54,6 +56,8 @@ interface DebugSnapshot {
   nativeSpeed: number | null;
   lastAccuracyM: number;
   gpsFixAgeS: number | null;
+  audioMode: AudioMode;
+  audioSettings: AudioSettingsSnapshot;
 }
 
 const SESSION_TARGET_S = 30 * 60; // 30 menit target sesi uji stabilitas
@@ -85,6 +89,7 @@ export default function AnakEdgePage() {
   });
   const [audioData, setAudioData] = useState({ rms: 0.012, db: 48.0 });
   const [accelMag, setAccelMag] = useState(9.8);
+  const [accelAvailable, setAccelAvailable] = useState(true);
   const [speedMps, setSpeedMps] = useState(0);
 
   // Status izin mikrofon & Wake Lock
@@ -108,10 +113,11 @@ export default function AnakEdgePage() {
     time: string;
   } | null>(null);
 
-  // Panel Diagnostik (?debug=1) & Mode Perekaman (?record=1)
+  // Panel Diagnostik (?debug=1), Mode Perekaman (?record=1), & Mode Audio Mentah (?raw_audio=1)
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [isRecordMode, setIsRecordMode] = useState(false);
   const isDebugModeRef = useRef(false);
+  const isRawAudioModeRef = useRef(false);
   const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot>({
     sentCount: 0,
     skippedCount: 0,
@@ -124,6 +130,12 @@ export default function AnakEdgePage() {
     nativeSpeed: null,
     lastAccuracyM: 8.0,
     gpsFixAgeS: null,
+    audioMode: "default",
+    audioSettings: {
+      echoCancellation: null,
+      noiseSuppression: null,
+      autoGainControl: null,
+    },
   });
 
   const stateRef = useRef({
@@ -145,6 +157,12 @@ export default function AnakEdgePage() {
     peakDb: 48.0,
     peakHoldUntilMs: 0,
     presetDbLockUntilMs: 0,
+    audioMode: "default" as AudioMode,
+    audioSettings: {
+      echoCancellation: null,
+      noiseSuppression: null,
+      autoGainControl: null,
+    } as AudioSettingsSnapshot,
   });
 
   // Ring buffer ukuran tetap (maksimal 10 interval publish terakhir) & agregat berjalan
@@ -183,14 +201,23 @@ export default function AnakEdgePage() {
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
 
-  // Deteksi ?debug=1 dan ?record=1 dari window.location.search di dalam useEffect (tanpa useSearchParams/Suspense)
+  // Deteksi ?debug=1, ?record=1, dan ?raw_audio=1 dari window.location.search di dalam useEffect (tanpa useSearchParams/Suspense)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const debugOn = params.get("debug") === "1";
+      const rawAudioOn = params.get("raw_audio") === "1";
       isDebugModeRef.current = debugOn;
+      isRawAudioModeRef.current = rawAudioOn;
+      stateRef.current.audioMode = rawAudioOn ? "raw" : "default";
       setIsDebugMode(debugOn);
       setIsRecordMode(params.get("record") === "1");
+      if (debugOn) {
+        setDebugSnapshot((prev) => ({
+          ...prev,
+          audioMode: rawAudioOn ? "raw" : "default",
+        }));
+      }
     }
   }, []);
 
@@ -569,6 +596,8 @@ export default function AnakEdgePage() {
         nativeSpeed: stateRef.current.nativeSpeed,
         lastAccuracyM: stateRef.current.realAcc,
         gpsFixAgeS,
+        audioMode: stateRef.current.audioMode,
+        audioSettings: stateRef.current.audioSettings,
       });
     }
   }, [publishRaw]);
@@ -597,6 +626,11 @@ export default function AnakEdgePage() {
       audioStreamRef.current.getTracks().forEach((t) => t.stop());
       audioStreamRef.current = null;
     }
+    stateRef.current.audioSettings = {
+      echoCancellation: null,
+      noiseSuppression: null,
+      autoGainControl: null,
+    };
     if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
       audioCtxRef.current.close().catch(() => {});
       audioCtxRef.current = null;
@@ -720,13 +754,42 @@ export default function AnakEdgePage() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("MediaDevices API tidak tersedia");
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioConstraints: boolean | MediaTrackConstraints =
+        isRawAudioModeRef.current
+          ? {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            }
+          : true;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
       if (!sensorRunningRef.current) {
         stream.getTracks().forEach((t) => t.stop());
         sensorStartingRef.current = false;
         return;
       }
       audioStreamRef.current = stream;
+      const audioTrack = stream.getAudioTracks()[0];
+      const trackSettings =
+        audioTrack && typeof audioTrack.getSettings === "function"
+          ? audioTrack.getSettings()
+          : null;
+      stateRef.current.audioSettings = {
+        echoCancellation:
+          typeof trackSettings?.echoCancellation === "boolean"
+            ? trackSettings.echoCancellation
+            : null,
+        noiseSuppression:
+          typeof trackSettings?.noiseSuppression === "boolean"
+            ? trackSettings.noiseSuppression
+            : null,
+        autoGainControl:
+          typeof trackSettings?.autoGainControl === "boolean"
+            ? trackSettings.autoGainControl
+            : null,
+      };
       const AudioCtx =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext })
@@ -797,6 +860,11 @@ export default function AnakEdgePage() {
         }
       }, 200);
     } catch {
+      stateRef.current.audioSettings = {
+        echoCancellation: null,
+        noiseSuppression: null,
+        autoGainControl: null,
+      };
       // Tampilkan pesan kecil di UI tanpa menghentikan GPS dan telemetri
       setMicErrorNotice(
         "Akses mikrofon ditolak/tidak tersedia — GPS & telemetri tetap berjalan dengan nilai dB terakhir."
@@ -830,14 +898,22 @@ export default function AnakEdgePage() {
 
       const onMotion = (ev: DeviceMotionEvent) => {
         const acc = ev.accelerationIncludingGravity;
-        if (acc) {
-          const mag = Math.sqrt(
-            (acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2
-          );
-          const roundedMag = Number(mag.toFixed(1));
-          stateRef.current.accel = roundedMag;
-          setAccelMag(roundedMag);
+        const hasX = typeof acc?.x === "number" && Number.isFinite(acc.x);
+        const hasY = typeof acc?.y === "number" && Number.isFinite(acc.y);
+        const hasZ = typeof acc?.z === "number" && Number.isFinite(acc.z);
+        if (!acc || (!hasX && !hasY && !hasZ)) {
+          setAccelAvailable(false);
+          return;
         }
+        const mag = Math.sqrt(
+          (hasX ? acc.x! : 0) ** 2 +
+            (hasY ? acc.y! : 0) ** 2 +
+            (hasZ ? acc.z! : 0) ** 2
+        );
+        const roundedMag = Number(mag.toFixed(1));
+        stateRef.current.accel = roundedMag;
+        setAccelMag(roundedMag);
+        setAccelAvailable(true);
       };
 
       if (motionHandlerRef.current) {
@@ -845,6 +921,8 @@ export default function AnakEdgePage() {
       }
       motionHandlerRef.current = onMotion;
       window.addEventListener("devicemotion", onMotion);
+    } else {
+      setAccelAvailable(false);
     }
 
     if (!sensorRunningRef.current) {
@@ -962,6 +1040,8 @@ export default function AnakEdgePage() {
         rawTrackerSpeed
       ),
       speed_native_mps: stateRef.current.nativeSpeed,
+      audio_mode: stateRef.current.audioMode,
+      audio_settings: stateRef.current.audioSettings,
     };
   }, []);
 
@@ -1109,7 +1189,9 @@ export default function AnakEdgePage() {
                 <span>Gerak</span>
               </div>
               <p className="text-xs font-bold text-slate-900">
-                {accelMag.toFixed(1)} m/s²
+                {accelAvailable
+                  ? `${accelMag.toFixed(1)} m/s²`
+                  : "tidak tersedia"}
               </p>
               <p className="text-[10px] font-medium text-slate-600 mt-0.5 truncate">
                 Kecepatan {speedMps.toFixed(2)} m/s
@@ -1387,6 +1469,18 @@ export default function AnakEdgePage() {
                   {debugSnapshot.heapUsedMb !== null
                     ? `${debugSnapshot.heapUsedMb.toFixed(2)} MB`
                     : "Tidak tersedia"}
+                </span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-slate-400">audio_mode:</span>{" "}
+                <span className="font-bold text-indigo-300">
+                  {debugSnapshot.audioMode}
+                </span>{" "}
+                <span className="text-slate-400">
+                  (EC:{" "}
+                  {String(debugSnapshot.audioSettings.echoCancellation)} | NS:{" "}
+                  {String(debugSnapshot.audioSettings.noiseSuppression)} | AGC:{" "}
+                  {String(debugSnapshot.audioSettings.autoGainControl)})
                 </span>
               </div>
             </div>

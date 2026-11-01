@@ -610,6 +610,30 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
             </span>
           </div>
         </div>
+        <div className="text-[10px] font-mono text-slate-500 pt-0.5 leading-snug">
+          audio_mode:{" "}
+          <span className="font-bold text-slate-800">
+            {livePreview.snapshot.audio_mode ?? "default"}
+          </span>{" "}
+          · EC:{" "}
+          <span className="font-bold text-slate-800">
+            {String(
+              livePreview.snapshot.audio_settings?.echoCancellation ?? null
+            )}
+          </span>{" "}
+          · NS:{" "}
+          <span className="font-bold text-slate-800">
+            {String(
+              livePreview.snapshot.audio_settings?.noiseSuppression ?? null
+            )}
+          </span>{" "}
+          · AGC:{" "}
+          <span className="font-bold text-slate-800">
+            {String(
+              livePreview.snapshot.audio_settings?.autoGainControl ?? null
+            )}
+          </span>
+        </div>
 
         {consistencyWarnings.length > 0 ? (
           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/80 space-y-1">

@@ -59,6 +59,13 @@ export const SERVER_POI: readonly PoiSpot[] = [
 export type LabelEnum = (typeof LABELS)[number];
 export type TimeSource = "real" | "simulated";
 export type LabelType = "real" | "simulated";
+export type AudioMode = "default" | "raw";
+
+export interface AudioSettingsSnapshot {
+  echoCancellation: boolean | null;
+  noiseSuppression: boolean | null;
+  autoGainControl: boolean | null;
+}
 
 export interface Sample {
   timestamp_ms: number;
@@ -79,6 +86,8 @@ export interface Sample {
   speed_native_mps?: number | null;
   recorded_at_ms?: number;
   accel_magnitude?: number;
+  audio_mode?: AudioMode;
+  audio_settings?: AudioSettingsSnapshot;
 }
 
 export interface RecordingMeta {
@@ -104,6 +113,8 @@ export interface SensorSnapshotInput {
   nowMs: number;
   speed_mps: number;
   speed_native_mps: number | null;
+  audio_mode?: AudioMode;
+  audio_settings?: AudioSettingsSnapshot | null;
 }
 
 export interface BuildSampleOptions {
@@ -268,6 +279,21 @@ export function buildSample(
         : null,
     recorded_at_ms: snapshot.nowMs,
     accel_magnitude: snapshot.accel_magnitude,
+    audio_mode: snapshot.audio_mode === "raw" ? "raw" : "default",
+    audio_settings: {
+      echoCancellation:
+        typeof snapshot.audio_settings?.echoCancellation === "boolean"
+          ? snapshot.audio_settings.echoCancellation
+          : null,
+      noiseSuppression:
+        typeof snapshot.audio_settings?.noiseSuppression === "boolean"
+          ? snapshot.audio_settings.noiseSuppression
+          : null,
+      autoGainControl:
+        typeof snapshot.audio_settings?.autoGainControl === "boolean"
+          ? snapshot.audio_settings.autoGainControl
+          : null,
+    },
   };
 
   if (options.device) {

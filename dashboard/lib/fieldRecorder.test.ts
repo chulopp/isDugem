@@ -102,6 +102,12 @@ describe("fieldRecorder", () => {
       speed_native_mps: 1.41,
       recorded_at_ms: nowMs,
       accel_magnitude: 9.8,
+      audio_mode: "default",
+      audio_settings: {
+        echoCancellation: null,
+        noiseSuppression: null,
+        autoGainControl: null,
+      },
     });
 
     // Saat koordinat dikunci ke POI demo dan waktu disimulasikan: speed_mps harus 0 dan time_source = "simulated"
@@ -118,6 +124,12 @@ describe("fieldRecorder", () => {
         nowMs,
         speed_mps: 12.5,
         speed_native_mps: null,
+        audio_mode: "raw",
+        audio_settings: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
       },
       {
         label: "CRITICAL_TERDETEKSI_DI_BAR",
@@ -134,6 +146,12 @@ describe("fieldRecorder", () => {
     expect(sampleLocked.speed_native_mps).toBeNull();
     expect(sampleLocked.note.length).toBe(120);
     expect(sampleLocked.consistency_warnings).toEqual([]);
+    expect(sampleLocked.audio_mode).toBe("raw");
+    expect(sampleLocked.audio_settings).toEqual({
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    });
 
     // Sampel tidak konsisten menyimpan daftar peringatan di consistency_warnings
     const sampleWarned = buildSample(
