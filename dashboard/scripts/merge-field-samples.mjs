@@ -170,11 +170,13 @@ for (const filePath of inputFiles) {
   }
 }
 
-// Buang duplikat berdasarkan device + recorded_at_ms (fallback ke kunci lama untuk file lama)
-// dan buang sampel dengan consistency_warnings tidak kosong kecuali --include-warned diberikan
+// Buang duplikat berdasarkan device + recorded_at_ms (fallback ke kunci lama untuk file lama),
+// buang sampel yang audio_mode !== "raw", dan buang sampel dengan consistency_warnings tidak kosong
+// kecuali --include-warned diberikan.
 const seenKeys = new Set();
 const dedupedSamples = [];
 let duplicateCount = 0;
+let nonRawDroppedCount = 0;
 let warnedDroppedCount = 0;
 const warnedDroppedByLabel = {};
 const warnReasonCounts = {};
@@ -191,6 +193,11 @@ for (const s of allSamples) {
     continue;
   }
   seenKeys.add(key);
+
+  if (!includeWarned && s.audio_mode !== "raw") {
+    nonRawDroppedCount += 1;
+    continue;
+  }
 
   const warnings = Array.isArray(s.consistency_warnings)
     ? s.consistency_warnings
@@ -254,6 +261,13 @@ console.log("=== RINGKASAN PENGGABUNGAN SAMPEL LAPANGAN ===");
 console.log(`File input     : ${inputFiles.length} file`);
 console.log(`Total dibaca   : ${allSamples.length} sampel`);
 console.log(`Duplikat buang : ${duplicateCount} sampel`);
+console.log(
+  `Non-raw buang  : ${nonRawDroppedCount} sampel (${
+    includeWarned
+      ? "--include-warned aktif"
+      : "default: hanya terima audio_mode === 'raw'"
+  })`
+);
 console.log(
   `Peringatan buang: ${warnedDroppedCount} sampel (${
     includeWarned ? "--include-warned aktif" : "default: buang tidak konsisten"
