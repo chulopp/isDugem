@@ -327,7 +327,8 @@ export default function AnakEdgePage() {
           accuracy_m: acc,
           timestamp_ms: pos.timestamp,
         },
-        Date.now()
+        Date.now(),
+        stateRef.current.nativeSpeed
       );
 
       if (stateRef.current.lockedSpotId === "gps_asli") {
