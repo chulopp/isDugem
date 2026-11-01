@@ -156,6 +156,7 @@ export default function AnakEdgePage() {
     rms: 0.012,
     db: 48.0,
     accel: 9.8,
+    accelAvailable: true,
     seq: Math.floor(Date.now() / 200),
     localCount: 0,
     lockedSpotId: "gps_asli",
@@ -192,6 +193,9 @@ export default function AnakEdgePage() {
   const publishTelemetryNowRef = useRef<() => void>(() => {});
   const speedTrackerRef = useRef(createSpeedTracker());
   const lastSpeedUiUpdateMsRef = useRef<number>(0);
+  const lastAccelUiUpdateMsRef = useRef<number>(0);
+  const displayedAccelMagRef = useRef<number>(9.8);
+  const displayedAccelAvailRef = useRef<boolean>(true);
 
   // Guard anti-reentrancy untuk startSensors/stopSensors
   const sensorRunningRef = useRef<boolean>(false);
@@ -651,6 +655,7 @@ export default function AnakEdgePage() {
     releaseWakeLock();
     speedTrackerRef.current.reset();
     lastSpeedUiUpdateMsRef.current = 0;
+    lastAccelUiUpdateMsRef.current = 0;
     lastPublishMsRef.current = 0;
     stateRef.current.localCount = 0;
     diagStatsRef.current.sessionStartMs = null;
@@ -726,6 +731,7 @@ export default function AnakEdgePage() {
 
     const startMs = Date.now();
     lastPublishMsRef.current = 0;
+    lastAccelUiUpdateMsRef.current = 0;
     stateRef.current.localCount = 0;
     diagStatsRef.current.sessionStartMs = startMs;
     diagStatsRef.current.sentCount = 0;
@@ -908,8 +914,17 @@ export default function AnakEdgePage() {
         const hasX = typeof acc?.x === "number" && Number.isFinite(acc.x);
         const hasY = typeof acc?.y === "number" && Number.isFinite(acc.y);
         const hasZ = typeof acc?.z === "number" && Number.isFinite(acc.z);
+        const nowMs = Date.now();
         if (!acc || (!hasX && !hasY && !hasZ)) {
-          setAccelAvailable(false);
+          stateRef.current.accelAvailable = false;
+          if (
+            displayedAccelAvailRef.current !== false &&
+            nowMs - lastAccelUiUpdateMsRef.current >= 500
+          ) {
+            lastAccelUiUpdateMsRef.current = nowMs;
+            displayedAccelAvailRef.current = false;
+            setAccelAvailable(false);
+          }
           return;
         }
         const mag = Math.sqrt(
@@ -919,8 +934,23 @@ export default function AnakEdgePage() {
         );
         const roundedMag = Number(mag.toFixed(1));
         stateRef.current.accel = roundedMag;
-        setAccelMag(roundedMag);
-        setAccelAvailable(true);
+        stateRef.current.accelAvailable = true;
+
+        if (nowMs - lastAccelUiUpdateMsRef.current >= 500) {
+          const magChanged = roundedMag !== displayedAccelMagRef.current;
+          const availChanged = displayedAccelAvailRef.current !== true;
+          if (magChanged || availChanged) {
+            lastAccelUiUpdateMsRef.current = nowMs;
+            if (magChanged) {
+              displayedAccelMagRef.current = roundedMag;
+              setAccelMag(roundedMag);
+            }
+            if (availChanged) {
+              displayedAccelAvailRef.current = true;
+              setAccelAvailable(true);
+            }
+          }
+        }
       };
 
       if (motionHandlerRef.current) {
@@ -929,6 +959,8 @@ export default function AnakEdgePage() {
       motionHandlerRef.current = onMotion;
       window.addEventListener("devicemotion", onMotion);
     } else {
+      stateRef.current.accelAvailable = false;
+      displayedAccelAvailRef.current = false;
       setAccelAvailable(false);
     }
 
