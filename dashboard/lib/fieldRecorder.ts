@@ -73,6 +73,7 @@ export interface Sample {
   label: LabelEnum;
   label_type: LabelType;
   note: string;
+  consistency_warnings: string[];
   device?: string;
   location_source?: string;
   speed_native_mps?: number | null;
@@ -236,6 +237,13 @@ export function buildSample(
     location_source !== "gps_asli" ? "simulated" : options.label_type;
 
   const cleanNote = (options.note || "").slice(0, 120);
+  const consistency_warnings = checkConsistency({
+    local_time,
+    lat: snapshot.lat,
+    lon: snapshot.lon,
+    db: snapshot.db,
+    label: options.label,
+  });
 
   const sample: Sample = {
     timestamp_ms,
@@ -250,6 +258,7 @@ export function buildSample(
     label: options.label,
     label_type: effectiveLabelType,
     note: cleanNote,
+    consistency_warnings,
     location_source,
     speed_native_mps:
       snapshot.speed_native_mps !== undefined &&

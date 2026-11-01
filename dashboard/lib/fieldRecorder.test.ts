@@ -96,6 +96,7 @@ describe("fieldRecorder", () => {
       label: "ISTIRAHAT_DI_KOS",
       label_type: "real",
       note: "kamar kos, tenang",
+      consistency_warnings: [],
       device: "Realme 9 Pro",
       location_source: "gps_asli",
       speed_native_mps: 1.41,
@@ -132,6 +133,33 @@ describe("fieldRecorder", () => {
     expect(sampleLocked.location_source).toBe("locked:bar_redhare");
     expect(sampleLocked.speed_native_mps).toBeNull();
     expect(sampleLocked.note.length).toBe(120);
+    expect(sampleLocked.consistency_warnings).toEqual([]);
+
+    // Sampel tidak konsisten menyimpan daftar peringatan di consistency_warnings
+    const sampleWarned = buildSample(
+      {
+        lat: -7.0502,
+        lon: 110.4398,
+        accuracy_m: 6.0,
+        db: 50.0,
+        accel_magnitude: 9.8,
+        lockedSpotId: "gps_asli",
+        timeMode: "auto",
+        seq: 12,
+        nowMs, // 23:10 WIB (jam_malam), lokasi di kampus, dB 50
+        speed_mps: 0.0,
+        speed_native_mps: null,
+      },
+      {
+        label: "CRITICAL_TERDETEKSI_DI_BAR",
+        label_type: "real",
+        note: "tes tidak konsisten",
+        device: "Realme 9 Pro",
+      }
+    );
+    expect(sampleWarned.consistency_warnings.length).toBe(2);
+    expect(sampleWarned.consistency_warnings[0]).toContain("jarak ke bar");
+    expect(sampleWarned.consistency_warnings[1]).toContain("dB > 75");
   });
 
   it("buildSample memaksa label_type = 'simulated' bila location_source bukan 'gps_asli' meskipun dipilih 'real'", () => {

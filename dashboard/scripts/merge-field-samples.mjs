@@ -26,7 +26,7 @@ function printUsageAndExit(msg) {
     console.error(`[ERROR] ${msg}`);
   }
   console.error(
-    "Penggunaan: node scripts/merge-field-samples.mjs <file1.json> [file2.json ...] --out <output.json>"
+    "Penggunaan: node scripts/merge-field-samples.mjs <file1.json> [file2.json ...] --out <output.json> [--include-warned]"
   );
   process.exit(1);
 }
@@ -34,6 +34,7 @@ function printUsageAndExit(msg) {
 const args = process.argv.slice(2);
 const inputFiles = [];
 let outPath = null;
+let includeWarned = false;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--out") {
@@ -42,6 +43,8 @@ for (let i = 0; i < args.length; i++) {
     }
     outPath = args[i + 1];
     i += 1;
+  } else if (args[i] === "--include-warned") {
+    includeWarned = true;
   } else if (args[i].startsWith("--")) {
     printUsageAndExit(`Flag tidak dikenal: ${args[i]}`);
   } else {
@@ -167,23 +170,56 @@ for (const filePath of inputFiles) {
   }
 }
 
-// Buang duplikat berdasarkan (timestamp_ms + device + lat + lon)
+// Buang duplikat berdasarkan device + recorded_at_ms (fallback ke kunci lama untuk file lama)
+// dan buang sampel dengan consistency_warnings tidak kosong kecuali --include-warned diberikan
 const seenKeys = new Set();
 const dedupedSamples = [];
 let duplicateCount = 0;
+let warnedDroppedCount = 0;
+const warnedDroppedByLabel = {};
+const warnReasonCounts = {};
 
 for (const s of allSamples) {
-  const key = `${s.timestamp_ms}|${s.device}|${s.lat}|${s.lon}`;
+  const hasRecordedAt =
+    typeof s.recorded_at_ms === "number" && Number.isFinite(s.recorded_at_ms);
+  const key = hasRecordedAt
+    ? `${s.device}|${s.recorded_at_ms}`
+    : `${s.timestamp_ms}|${s.device}|${s.lat}|${s.lon}`;
+
   if (seenKeys.has(key)) {
     duplicateCount += 1;
     continue;
   }
   seenKeys.add(key);
+
+  const warnings = Array.isArray(s.consistency_warnings)
+    ? s.consistency_warnings
+    : [];
+  if (!includeWarned && warnings.length > 0) {
+    warnedDroppedCount += 1;
+    warnedDroppedByLabel[s.label] = (warnedDroppedByLabel[s.label] || 0) + 1;
+    for (const w of warnings) {
+      const reason = String(w);
+      warnReasonCounts[reason] = (warnReasonCounts[reason] || 0) + 1;
+    }
+    continue;
+  }
+
   dedupedSamples.push(s);
 }
 
-// Urutkan menurut timestamp_ms naik
-dedupedSamples.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+// Urutkan menurut recorded_at_ms naik (fallback timestamp_ms bila tidak ada)
+dedupedSamples.sort((a, b) => {
+  const ta =
+    typeof a.recorded_at_ms === "number" && Number.isFinite(a.recorded_at_ms)
+      ? a.recorded_at_ms
+      : a.timestamp_ms;
+  const tb =
+    typeof b.recorded_at_ms === "number" && Number.isFinite(b.recorded_at_ms)
+      ? b.recorded_at_ms
+      : b.timestamp_ms;
+  return ta - tb;
+});
 
 const devicesList = Array.from(deviceSet);
 const mergedOutput = {
@@ -218,13 +254,33 @@ console.log("=== RINGKASAN PENGGABUNGAN SAMPEL LAPANGAN ===");
 console.log(`File input     : ${inputFiles.length} file`);
 console.log(`Total dibaca   : ${allSamples.length} sampel`);
 console.log(`Duplikat buang : ${duplicateCount} sampel`);
+console.log(
+  `Peringatan buang: ${warnedDroppedCount} sampel (${
+    includeWarned ? "--include-warned aktif" : "default: buang tidak konsisten"
+  })`
+);
 console.log(`Total akhir    : ${dedupedSamples.length} sampel`);
 console.log(`Output disimpan: ${resolvedOut}`);
-console.log("\nJumlah per Label:");
+
+if (warnedDroppedCount > 0) {
+  console.log("\nSampel Dibuang karena Peringatan (per Label):");
+  for (const [lbl, cnt] of Object.entries(warnedDroppedByLabel)) {
+    console.log(`  - ${lbl.padEnd(28)}: ${cnt}`);
+  }
+  const topReasons = Object.entries(warnReasonCounts).sort(
+    (a, b) => b[1] - a[1]
+  );
+  console.log("\nAlasan Peringatan Terbanyak:");
+  for (const [reason, cnt] of topReasons.slice(0, 5)) {
+    console.log(`  - (${cnt}x) ${reason}`);
+  }
+}
+
+console.log("\nJumlah Akhir per Label:");
 for (const [lbl, cnt] of Object.entries(labelCounts)) {
   console.log(`  - ${lbl.padEnd(28)}: ${cnt}`);
 }
-console.log("\nJumlah per Device:");
+console.log("\nJumlah Akhir per Device:");
 for (const [dev, cnt] of Object.entries(deviceCounts)) {
   console.log(`  - ${dev.padEnd(28)}: ${cnt}`);
 }
