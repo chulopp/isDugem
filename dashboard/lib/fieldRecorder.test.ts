@@ -4,9 +4,11 @@ import {
   buildSample,
   checkConsistency,
   computeConsistentRms,
+  computePoiCategorySummary,
   deriveTimeLabelFromLocalTime,
   formatJakartaLocalTime,
   LABELS,
+  SERVER_POI,
   toFilename,
 } from "./fieldRecorder";
 import { POI_SPOTS } from "./mqttTopics";
@@ -132,75 +134,153 @@ describe("fieldRecorder", () => {
     expect(sampleLocked.note.length).toBe(120);
   });
 
+  it("buildSample memaksa label_type = 'simulated' bila location_source bukan 'gps_asli' meskipun dipilih 'real'", () => {
+    const nowMs = Date.parse("2026-11-01T16:10:00Z");
+    const sampleForced = buildSample(
+      {
+        lat: -7.0632,
+        lon: 110.4385,
+        accuracy_m: 6.0,
+        db: 42.0,
+        accel_magnitude: 9.8,
+        lockedSpotId: "kos_mulawarman",
+        timeMode: "auto",
+        seq: 12,
+        nowMs,
+        speed_mps: 0.4,
+        speed_native_mps: 0.3,
+      },
+      {
+        label: "ISTIRAHAT_DI_KOS",
+        label_type: "real",
+        note: "coba paksa real saat koordinat dikunci",
+        device: "Realme 9 Pro",
+      }
+    );
+
+    expect(sampleForced.location_source).toBe("locked:kos_mulawarman");
+    expect(sampleForced.label_type).toBe("simulated");
+    expect(sampleForced.speed_mps).toBe(0);
+  });
+
   it("checkConsistency mengembalikan array kosong untuk kasus valid dan daftar peringatan untuk kasus tidak sesuai", () => {
     // 1. Kasus lolos: SEDANG_KULIAH di Kampus UNDIP pada 09:00 dengan dB 52
     expect(
-      checkConsistency(
-        {
-          local_time: "09:00",
-          lat: -7.0502,
-          lon: 110.4398,
-          db: 52.0,
-          label: "SEDANG_KULIAH",
-        },
-        POI_SPOTS
-      )
+      checkConsistency({
+        local_time: "09:00",
+        lat: -7.0502,
+        lon: 110.4398,
+        db: 52.0,
+        label: "SEDANG_KULIAH",
+      })
     ).toEqual([]);
 
     // 2. Kasus lolos: ISTIRAHAT_DI_KOS lewat tengah malam (01:15) di Kos Mulawarman dengan dB 42
     expect(
-      checkConsistency(
-        {
-          local_time: "01:15",
-          lat: -7.067588,
-          lon: 110.439708,
-          db: 42.0,
-          label: "ISTIRAHAT_DI_KOS",
-        },
-        POI_SPOTS
-      )
+      checkConsistency({
+        local_time: "01:15",
+        lat: -7.067588,
+        lon: 110.439708,
+        db: 42.0,
+        label: "ISTIRAHAT_DI_KOS",
+      })
     ).toEqual([]);
 
     // 3. Kasus tumpang tindih jam: SEDANG_KULIAH pada 12:15 (masuk waktu_sholat!) harus memberi peringatan
-    const warnOverlap = checkConsistency(
-      {
-        local_time: "12:15",
-        lat: -7.0502,
-        lon: 110.4398,
-        db: 50.0,
-        label: "SEDANG_KULIAH",
-      },
-      POI_SPOTS
-    );
+    const warnOverlap = checkConsistency({
+      local_time: "12:15",
+      lat: -7.0502,
+      lon: 110.4398,
+      db: 50.0,
+      label: "SEDANG_KULIAH",
+    });
     expect(warnOverlap.length).toBe(1);
     expect(warnOverlap[0]).toContain("waktu_sholat");
 
     // 4. Kasus pelanggaran ganda: CRITICAL_TERDETEKSI_DI_BAR tetapi jam 10:00, lokasi di kampus, dan dB 50
-    const warnBar = checkConsistency(
-      {
-        local_time: "10:00",
-        lat: -7.0502,
-        lon: 110.4398,
-        db: 50.0,
-        label: "CRITICAL_TERDETEKSI_DI_BAR",
-      },
-      POI_SPOTS
-    );
+    const warnBar = checkConsistency({
+      local_time: "10:00",
+      lat: -7.0502,
+      lon: 110.4398,
+      db: 50.0,
+      label: "CRITICAL_TERDETEKSI_DI_BAR",
+    });
     expect(warnBar.length).toBe(3);
 
     // 5. Kasus ALERT_BOLOS_KULIAH tetapi masih berada di dalam radius kampus
-    const warnBolosInKampus = checkConsistency(
-      {
-        local_time: "10:00",
-        lat: -7.0502,
-        lon: 110.4398,
-        db: 55.0,
-        label: "ALERT_BOLOS_KULIAH",
-      },
-      POI_SPOTS
-    );
+    const warnBolosInKampus = checkConsistency({
+      local_time: "10:00",
+      lat: -7.0502,
+      lon: 110.4398,
+      db: 55.0,
+      label: "ALERT_BOLOS_KULIAH",
+    });
     expect(warnBolosInKampus.length).toBe(1);
     expect(warnBolosInKampus[0]).toContain("di dalam kampus");
+  });
+
+  it("checkConsistency mengikuti titik pusat SERVER_POI (bukan multi-spot POI_SPOTS dashboard)", () => {
+    // Titik A (-7.0655, 110.4330): berada dalam 750 m dari pusat kos SERVER_POI (-7.0632, 110.4385; ~659 m),
+    // tetapi di luar 750 m dari semua 3 spot kos di POI_SPOTS dashboard (>750 m).
+    const latInsideServerOnly = -7.0655;
+    const lonInsideServerOnly = 110.433;
+
+    const serverSummaryA = computePoiCategorySummary(
+      latInsideServerOnly,
+      lonInsideServerOnly,
+      SERVER_POI
+    );
+    const dashboardSummaryA = computePoiCategorySummary(
+      latInsideServerOnly,
+      lonInsideServerOnly,
+      POI_SPOTS
+    );
+    expect(serverSummaryA.kos.distM).toBeLessThanOrEqual(750);
+    expect(serverSummaryA.kos.inside).toBe(true);
+    expect(dashboardSummaryA.kos.distM).toBeGreaterThan(750);
+    expect(dashboardSummaryA.kos.inside).toBe(false);
+
+    // Dengan SERVER_POI (default), titik A dianggap dalam radius kos (tanpa peringatan lokasi)
+    expect(
+      checkConsistency({
+        local_time: "23:15",
+        lat: latInsideServerOnly,
+        lon: lonInsideServerOnly,
+        db: 42.0,
+        label: "ISTIRAHAT_DI_KOS",
+      })
+    ).toEqual([]);
+
+    // Sebaliknya, Titik B (-7.0720, 110.439708): di luar 750 m dari pusat kos SERVER_POI (~987 m),
+    // tetapi di dalam 750 m dari kos_mulawarman di POI_SPOTS dashboard (~490 m).
+    const latInsideDashboardOnly = -7.072;
+    const lonInsideDashboardOnly = 110.439708;
+
+    const serverSummaryB = computePoiCategorySummary(
+      latInsideDashboardOnly,
+      lonInsideDashboardOnly,
+      SERVER_POI
+    );
+    const dashboardSummaryB = computePoiCategorySummary(
+      latInsideDashboardOnly,
+      lonInsideDashboardOnly,
+      POI_SPOTS
+    );
+    expect(serverSummaryB.kos.distM).toBeGreaterThan(750);
+    expect(serverSummaryB.kos.inside).toBe(false);
+    expect(dashboardSummaryB.kos.distM).toBeLessThanOrEqual(750);
+    expect(dashboardSummaryB.kos.inside).toBe(true);
+
+    // Dengan SERVER_POI (default), titik B dianggap di luar radius kos (menghasilkan peringatan lokasi)
+    const warningsB = checkConsistency({
+      local_time: "23:15",
+      lat: latInsideDashboardOnly,
+      lon: lonInsideDashboardOnly,
+      db: 42.0,
+      label: "ISTIRAHAT_DI_KOS",
+    });
+    expect(warningsB.length).toBe(1);
+    expect(warningsB[0]).toContain("jarak ke kos <= 750 m");
   });
 
   it("toFilename dan buildFile menghasilkan nama dan struktur file yang benar", () => {
@@ -220,3 +300,4 @@ describe("fieldRecorder", () => {
     });
   });
 });
+

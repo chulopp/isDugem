@@ -12,6 +12,50 @@ export const LABELS: readonly AlertStatus[] = [
   "NORMAL",
 ] as const;
 
+// harus sama dengan server/config.py DEFAULT_POI
+export const SERVER_POI: readonly PoiSpot[] = [
+  {
+    id: "server_kampus",
+    name: "Kampus (Server Default)",
+    category: "kampus",
+    area: "Tembalang",
+    lat: -7.0502,
+    lon: 110.4398,
+    radius_m: 150,
+    color: "#2563EB",
+  },
+  {
+    id: "server_masjid",
+    name: "Masjid (Server Default)",
+    category: "masjid",
+    area: "Tembalang",
+    lat: -7.0552,
+    lon: 110.437,
+    radius_m: 100,
+    color: "#10B981",
+  },
+  {
+    id: "server_kos",
+    name: "Kos (Server Default)",
+    category: "kos",
+    area: "Tembalang",
+    lat: -7.0632,
+    lon: 110.4385,
+    radius_m: 750,
+    color: "#6366F1",
+  },
+  {
+    id: "server_bar",
+    name: "Bar (Server Default)",
+    category: "bar",
+    area: "Semarang Bawah",
+    lat: -6.966984,
+    lon: 110.429807,
+    radius_m: 250,
+    color: "#E11D48",
+  },
+] as const;
+
 export type LabelEnum = (typeof LABELS)[number];
 export type TimeSource = "real" | "simulated";
 export type LabelType = "real" | "simulated";
@@ -188,6 +232,8 @@ export function buildSample(
     snapshot.lockedSpotId === "gps_asli"
       ? "gps_asli"
       : `locked:${snapshot.lockedSpotId}`;
+  const effectiveLabelType: LabelType =
+    location_source !== "gps_asli" ? "simulated" : options.label_type;
 
   const cleanNote = (options.note || "").slice(0, 120);
 
@@ -202,7 +248,7 @@ export function buildSample(
     db: snapshot.db,
     speed_mps,
     label: options.label,
-    label_type: options.label_type,
+    label_type: effectiveLabelType,
     note: cleanNote,
     location_source,
     speed_native_mps:
@@ -271,22 +317,22 @@ export function toFilename(
 }
 
 export interface CategoryGeometrySummary {
-  kampus: { distM: number; radiusM: number; inside: boolean };
-  masjid: { distM: number; radiusM: number; inside: boolean };
-  kos: { distM: number; radiusM: number; inside: boolean };
-  bar: { distM: number; radiusM: number; inside: boolean };
+  kampus: { distM: number; radiusM: number; inside: boolean; nearestSpotName: string };
+  masjid: { distM: number; radiusM: number; inside: boolean; nearestSpotName: string };
+  kos: { distM: number; radiusM: number; inside: boolean; nearestSpotName: string };
+  bar: { distM: number; radiusM: number; inside: boolean; nearestSpotName: string };
 }
 
 export function computePoiCategorySummary(
   lat: number,
   lon: number,
-  poiSpots: readonly PoiSpot[] = POI_SPOTS
+  poiSpots: readonly PoiSpot[] = SERVER_POI
 ): CategoryGeometrySummary {
   const res: CategoryGeometrySummary = {
-    kampus: { distM: Infinity, radiusM: 150, inside: false },
-    masjid: { distM: Infinity, radiusM: 100, inside: false },
-    kos: { distM: Infinity, radiusM: 750, inside: false },
-    bar: { distM: Infinity, radiusM: 250, inside: false },
+    kampus: { distM: Infinity, radiusM: 150, inside: false, nearestSpotName: "Kampus" },
+    masjid: { distM: Infinity, radiusM: 100, inside: false, nearestSpotName: "Masjid" },
+    kos: { distM: Infinity, radiusM: 750, inside: false, nearestSpotName: "Kos" },
+    bar: { distM: Infinity, radiusM: 250, inside: false, nearestSpotName: "Bar" },
   };
 
   for (const spot of poiSpots) {
@@ -295,6 +341,7 @@ export function computePoiCategorySummary(
     if (d < res[cat].distM) {
       res[cat].distM = d;
       res[cat].radiusM = spot.radius_m;
+      res[cat].nearestSpotName = spot.name;
     }
     if (d <= spot.radius_m) {
       res[cat].inside = true;
@@ -311,7 +358,7 @@ export function computePoiCategorySummary(
  */
 export function checkConsistency(
   sample: Pick<Sample, "local_time" | "lat" | "lon" | "db" | "label">,
-  poiSpots: readonly PoiSpot[] = POI_SPOTS
+  poiSpots: readonly PoiSpot[] = SERVER_POI
 ): string[] {
   const warnings: string[] = [];
   const timeLabel = deriveTimeLabelFromLocalTime(sample.local_time);
@@ -413,3 +460,4 @@ export function checkConsistency(
 
   return warnings;
 }
+

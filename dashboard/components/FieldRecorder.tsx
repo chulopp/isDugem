@@ -28,6 +28,7 @@ import {
   resolveTelemetryTimestampMs,
   Sample,
   SensorSnapshotInput,
+  SERVER_POI,
   toFilename,
 } from "@/lib/fieldRecorder";
 import { POI_SPOTS } from "@/lib/mqttTopics";
@@ -224,6 +225,7 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
 
   // Evaluasi syarat pemblokiran tombol Rekam
   const isLockedCoord = livePreview.snapshot.lockedSpotId !== "gps_asli";
+  const effectiveLabelType: LabelType = isLockedCoord ? "simulated" : labelType;
   const blockReasons: string[] = [];
   if (!liveSource.sensorActive) {
     blockReasons.push(
@@ -283,7 +285,7 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
       const snap = src.getSnapshot();
       const newSample = buildSample(snap, {
         label: selectedLabel,
-        label_type: labelType,
+        label_type: snap.lockedSpotId !== "gps_asli" ? "simulated" : labelType,
         note,
         device: effectiveDeviceName,
       });
@@ -375,6 +377,12 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
   const geoSummary = computePoiCategorySummary(
     livePreview.snapshot.lat,
     livePreview.snapshot.lon,
+    SERVER_POI
+  );
+
+  const dashboardSpotInfo = computePoiCategorySummary(
+    livePreview.snapshot.lat,
+    livePreview.snapshot.lon,
     POI_SPOTS
   );
 
@@ -391,7 +399,7 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
       db: livePreview.snapshot.db,
       label: selectedLabel,
     },
-    POI_SPOTS
+    SERVER_POI
   );
 
   const countsByLabel = LABELS.reduce((acc, lbl) => {
@@ -475,16 +483,19 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
 
         <div className="grid grid-cols-2 gap-2">
           {(["real", "simulated"] as const).map((t) => {
-            const active = labelType === t;
+            const active = effectiveLabelType === t;
+            const disabledByLock = t === "real" && isLockedCoord;
             return (
               <button
                 key={t}
                 type="button"
-                disabled={isRecording}
+                disabled={isRecording || disabledByLock}
                 onClick={() => setLabelType(t)}
                 className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all ${
                   active
                     ? "bg-slate-900 text-white border-slate-900"
+                    : disabledByLock
+                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                     : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
                 }`}
               >
@@ -493,6 +504,17 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
             );
           })}
         </div>
+        {isLockedCoord && (
+          <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200/80 rounded-lg px-2.5 py-1.5 font-medium leading-snug">
+            Koordinat sedang dikunci ke POI demo (
+            <span className="font-mono">
+              locked:{livePreview.snapshot.lockedSpotId}
+            </span>
+            ). Pilihan <span className="font-mono font-bold">real</span>{" "}
+            dinonaktifkan dan <span className="font-mono font-bold">label_type</span>{" "}
+            dipaksa menjadi <span className="font-mono font-bold">simulated</span>.
+          </p>
+        )}
         <p className="text-[10px] text-slate-500 leading-relaxed">
           Gunakan <span className="font-mono font-semibold">real</span> HANYA
           jika lokasi (GPS asli) dan suara benar-benar asli. Gunakan{" "}
@@ -560,6 +582,12 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
               {Math.round(geoSummary.bar.distM)}m
             </span>
           </div>
+        </div>
+        <div className="text-[10px] text-slate-400 leading-tight">
+          Info spot dashboard terdekat: Kos ({dashboardSpotInfo.kos.nearestSpotName},{" "}
+          {Math.round(dashboardSpotInfo.kos.distM)}m) · Bar (
+          {dashboardSpotInfo.bar.nearestSpotName},{" "}
+          {Math.round(dashboardSpotInfo.bar.distM)}m)
         </div>
 
         <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono text-slate-600 pt-0.5">
@@ -754,3 +782,4 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
     </div>
   );
 }
+
