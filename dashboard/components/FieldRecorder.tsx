@@ -21,6 +21,7 @@ import {
   computePoiCategorySummary,
   deriveTimeLabelFromLocalTime,
   formatJakartaLocalTime,
+  isRawAudioNotHonored,
   LABELS,
   LabelEnum,
   LabelType,
@@ -391,6 +392,15 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
     livePreview.snapshot.speed_mps
   );
 
+  const requestedAudioModePreview =
+    livePreview.snapshot.audio_mode_requested ??
+    livePreview.snapshot.audio_mode ??
+    "raw";
+  const rawNotHonored = isRawAudioNotHonored(
+    requestedAudioModePreview,
+    livePreview.snapshot.audio_settings
+  );
+
   const consistencyWarnings = checkConsistency(
     {
       local_time: livePreview.localTime,
@@ -398,6 +408,9 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
       lon: livePreview.snapshot.lon,
       db: livePreview.snapshot.db,
       label: selectedLabel,
+      audio_mode: livePreview.snapshot.audio_mode ?? "raw",
+      audio_mode_requested: requestedAudioModePreview,
+      audio_settings: livePreview.snapshot.audio_settings ?? undefined,
     },
     SERVER_POI
   );
@@ -611,9 +624,9 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
           </div>
         </div>
         <div className="text-[10px] font-mono text-slate-500 pt-0.5 leading-snug">
-          audio_mode:{" "}
+          mode diminta:{" "}
           <span className="font-bold text-slate-800">
-            {livePreview.snapshot.audio_mode ?? "default"}
+            {requestedAudioModePreview}
           </span>{" "}
           · EC:{" "}
           <span className="font-bold text-slate-800">
@@ -634,6 +647,11 @@ export default function FieldRecorder({ liveSource }: FieldRecorderProps) {
             )}
           </span>
         </div>
+        {rawNotHonored && (
+          <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-[10px] font-bold text-rose-800 leading-snug">
+            Peringatan: browser mengabaikan pengaturan raw (salah satu EC/NS/AGC masih true).
+          </div>
+        )}
 
         {consistencyWarnings.length > 0 ? (
           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/80 space-y-1">

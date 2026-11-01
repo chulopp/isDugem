@@ -23,8 +23,13 @@ import { AnakTelemetry, OrtuTelemetry, TimeMode } from "@/lib/types";
 import { createSpeedTracker } from "@/lib/speed";
 import {
   AudioMode,
+  buildAudioConstraints,
+  resolveAudioMode,
+} from "@/lib/audioMode";
+import {
   AudioSettingsSnapshot,
   computeConsistentRms,
+  isRawAudioNotHonored,
   resolveEffectiveSpeedMps,
   resolveTelemetryTimestampMs,
   SensorSnapshotInput,
@@ -57,6 +62,7 @@ interface DebugSnapshot {
   lastAccuracyM: number;
   gpsFixAgeS: number | null;
   audioMode: AudioMode;
+  audioModeRequested: AudioMode;
   audioSettings: AudioSettingsSnapshot;
 }
 
@@ -113,11 +119,10 @@ export default function AnakEdgePage() {
     time: string;
   } | null>(null);
 
-  // Panel Diagnostik (?debug=1), Mode Perekaman (?record=1), & Mode Audio Mentah (?raw_audio=1)
+  // Panel Diagnostik (?debug=1), Mode Perekaman (?record=1), & Mode Audio (bawaan: raw, ?std_audio=1: default)
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [isRecordMode, setIsRecordMode] = useState(false);
   const isDebugModeRef = useRef(false);
-  const isRawAudioModeRef = useRef(false);
   const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot>({
     sentCount: 0,
     skippedCount: 0,
@@ -130,7 +135,8 @@ export default function AnakEdgePage() {
     nativeSpeed: null,
     lastAccuracyM: 8.0,
     gpsFixAgeS: null,
-    audioMode: "default",
+    audioMode: "raw",
+    audioModeRequested: "raw",
     audioSettings: {
       echoCancellation: null,
       noiseSuppression: null,
@@ -157,7 +163,8 @@ export default function AnakEdgePage() {
     peakDb: 48.0,
     peakHoldUntilMs: 0,
     presetDbLockUntilMs: 0,
-    audioMode: "default" as AudioMode,
+    audioMode: "raw" as AudioMode,
+    audioModeRequested: "raw" as AudioMode,
     audioSettings: {
       echoCancellation: null,
       noiseSuppression: null,
@@ -201,21 +208,22 @@ export default function AnakEdgePage() {
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const motionHandlerRef = useRef<((ev: DeviceMotionEvent) => void) | null>(null);
 
-  // Deteksi ?debug=1, ?record=1, dan ?raw_audio=1 dari window.location.search di dalam useEffect (tanpa useSearchParams/Suspense)
+  // Deteksi ?debug=1, ?record=1, dan mode audio (?std_audio=1 / ?raw_audio=1) dari window.location.search di dalam useEffect
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const debugOn = params.get("debug") === "1";
-      const rawAudioOn = params.get("raw_audio") === "1";
+      const requestedMode = resolveAudioMode(window.location.search);
       isDebugModeRef.current = debugOn;
-      isRawAudioModeRef.current = rawAudioOn;
-      stateRef.current.audioMode = rawAudioOn ? "raw" : "default";
+      stateRef.current.audioMode = requestedMode;
+      stateRef.current.audioModeRequested = requestedMode;
       setIsDebugMode(debugOn);
       setIsRecordMode(params.get("record") === "1");
       if (debugOn) {
         setDebugSnapshot((prev) => ({
           ...prev,
-          audioMode: rawAudioOn ? "raw" : "default",
+          audioMode: requestedMode,
+          audioModeRequested: requestedMode,
         }));
       }
     }
@@ -597,6 +605,7 @@ export default function AnakEdgePage() {
         lastAccuracyM: stateRef.current.realAcc,
         gpsFixAgeS,
         audioMode: stateRef.current.audioMode,
+        audioModeRequested: stateRef.current.audioModeRequested,
         audioSettings: stateRef.current.audioSettings,
       });
     }
@@ -754,14 +763,12 @@ export default function AnakEdgePage() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("MediaDevices API tidak tersedia");
       }
-      const audioConstraints: boolean | MediaTrackConstraints =
-        isRawAudioModeRef.current
-          ? {
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-            }
-          : true;
+      const requestedAudioMode = resolveAudioMode(
+        typeof window !== "undefined" ? window.location.search : ""
+      );
+      stateRef.current.audioMode = requestedAudioMode;
+      stateRef.current.audioModeRequested = requestedAudioMode;
+      const audioConstraints = buildAudioConstraints(requestedAudioMode);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
       });
@@ -1041,6 +1048,7 @@ export default function AnakEdgePage() {
       ),
       speed_native_mps: stateRef.current.nativeSpeed,
       audio_mode: stateRef.current.audioMode,
+      audio_mode_requested: stateRef.current.audioModeRequested,
       audio_settings: stateRef.current.audioSettings,
     };
   }, []);
@@ -1472,9 +1480,9 @@ export default function AnakEdgePage() {
                 </span>
               </div>
               <div className="col-span-2">
-                <span className="text-slate-400">audio_mode:</span>{" "}
+                <span className="text-slate-400">Mode audio diminta:</span>{" "}
                 <span className="font-bold text-indigo-300">
-                  {debugSnapshot.audioMode}
+                  {debugSnapshot.audioModeRequested}
                 </span>{" "}
                 <span className="text-slate-400">
                   (EC:{" "}
@@ -1482,6 +1490,14 @@ export default function AnakEdgePage() {
                   {String(debugSnapshot.audioSettings.noiseSuppression)} | AGC:{" "}
                   {String(debugSnapshot.audioSettings.autoGainControl)})
                 </span>
+                {isRawAudioNotHonored(
+                  debugSnapshot.audioModeRequested,
+                  debugSnapshot.audioSettings
+                ) && (
+                  <div className="mt-1 px-2 py-1 rounded bg-amber-950/90 border border-amber-500/60 text-amber-300 font-bold text-[10px]">
+                    Peringatan: browser mengabaikan pengaturan raw (salah satu EC/NS/AGC masih true).
+                  </div>
+                )}
               </div>
             </div>
           </div>

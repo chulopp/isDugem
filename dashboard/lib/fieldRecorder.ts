@@ -1,6 +1,9 @@
+import { AudioMode } from "./audioMode";
 import { getSimulatedTimestampMs } from "./mockData";
 import { haversineDistanceM, POI_SPOTS } from "./mqttTopics";
 import { AlertStatus, PoiSpot, TimeLabel, TimeMode } from "./types";
+
+export type { AudioMode };
 
 export const LABELS: readonly AlertStatus[] = [
   "SEDANG_KULIAH",
@@ -59,7 +62,6 @@ export const SERVER_POI: readonly PoiSpot[] = [
 export type LabelEnum = (typeof LABELS)[number];
 export type TimeSource = "real" | "simulated";
 export type LabelType = "real" | "simulated";
-export type AudioMode = "default" | "raw";
 
 export interface AudioSettingsSnapshot {
   echoCancellation: boolean | null;
@@ -87,6 +89,7 @@ export interface Sample {
   recorded_at_ms?: number;
   accel_magnitude?: number;
   audio_mode?: AudioMode;
+  audio_mode_requested?: AudioMode;
   audio_settings?: AudioSettingsSnapshot;
 }
 
@@ -114,6 +117,7 @@ export interface SensorSnapshotInput {
   speed_mps: number;
   speed_native_mps: number | null;
   audio_mode?: AudioMode;
+  audio_mode_requested?: AudioMode;
   audio_settings?: AudioSettingsSnapshot | null;
 }
 
@@ -248,12 +252,34 @@ export function buildSample(
     location_source !== "gps_asli" ? "simulated" : options.label_type;
 
   const cleanNote = (options.note || "").slice(0, 120);
+  const audio_mode: AudioMode =
+    snapshot.audio_mode === "default" ? "default" : "raw";
+  const audio_mode_requested: AudioMode =
+    snapshot.audio_mode_requested ?? audio_mode;
+  const audio_settings: AudioSettingsSnapshot = {
+    echoCancellation:
+      typeof snapshot.audio_settings?.echoCancellation === "boolean"
+        ? snapshot.audio_settings.echoCancellation
+        : null,
+    noiseSuppression:
+      typeof snapshot.audio_settings?.noiseSuppression === "boolean"
+        ? snapshot.audio_settings.noiseSuppression
+        : null,
+    autoGainControl:
+      typeof snapshot.audio_settings?.autoGainControl === "boolean"
+        ? snapshot.audio_settings.autoGainControl
+        : null,
+  };
   const consistency_warnings = checkConsistency({
     local_time,
     lat: snapshot.lat,
     lon: snapshot.lon,
     db: snapshot.db,
+    rms,
     label: options.label,
+    audio_mode,
+    audio_mode_requested,
+    audio_settings,
   });
 
   const sample: Sample = {
@@ -279,21 +305,9 @@ export function buildSample(
         : null,
     recorded_at_ms: snapshot.nowMs,
     accel_magnitude: snapshot.accel_magnitude,
-    audio_mode: snapshot.audio_mode === "raw" ? "raw" : "default",
-    audio_settings: {
-      echoCancellation:
-        typeof snapshot.audio_settings?.echoCancellation === "boolean"
-          ? snapshot.audio_settings.echoCancellation
-          : null,
-      noiseSuppression:
-        typeof snapshot.audio_settings?.noiseSuppression === "boolean"
-          ? snapshot.audio_settings.noiseSuppression
-          : null,
-      autoGainControl:
-        typeof snapshot.audio_settings?.autoGainControl === "boolean"
-          ? snapshot.audio_settings.autoGainControl
-          : null,
-    },
+    audio_mode,
+    audio_mode_requested,
+    audio_settings,
   };
 
   if (options.device) {
@@ -386,13 +400,37 @@ export function computePoiCategorySummary(
   return res;
 }
 
+export type ConsistencyCheckInput = Pick<
+  Sample,
+  "local_time" | "lat" | "lon" | "db" | "label"
+> &
+  Partial<
+    Pick<
+      Sample,
+      "rms" | "audio_mode" | "audio_mode_requested" | "audio_settings"
+    >
+  >;
+
+export function isRawAudioNotHonored(
+  audioModeRequested?: AudioMode,
+  audioSettings?: AudioSettingsSnapshot | null
+): boolean {
+  return Boolean(
+    audioModeRequested === "raw" &&
+      audioSettings &&
+      (audioSettings.echoCancellation === true ||
+        audioSettings.noiseSuppression === true ||
+        audioSettings.autoGainControl === true)
+  );
+}
+
 /**
  * Memeriksa konsistensi antara `label` yang dipilih dengan jam (`local_time`),
- * geometri jarak ke `poiSpots`, dan tingkat kebisingan (`db`).
+ * geometri jarak ke `poiSpots`, tingkat kebisingan (`db`), dan pengaman kualitas audio.
  * Mengembalikan daftar string peringatan (tidak memblokir perekaman).
  */
 export function checkConsistency(
-  sample: Pick<Sample, "local_time" | "lat" | "lon" | "db" | "label">,
+  sample: ConsistencyCheckInput,
   poiSpots: readonly PoiSpot[] = SERVER_POI
 ): string[] {
   const warnings: string[] = [];
@@ -491,6 +529,21 @@ export function checkConsistency(
     warnings.push(
       `Label SEDANG_KULIAH butuh dB < 65, saat ini ${db.toFixed(1)} dB.`
     );
+  }
+
+  // 4. Pengaman kualitas audio
+  const effectiveRms =
+    typeof sample.rms === "number" && Number.isFinite(sample.rms)
+      ? sample.rms
+      : computeConsistentRms(db);
+  if (db <= 1 || effectiveRms < 1e-4) {
+    warnings.push("audio_digital_silence");
+  }
+  if (sample.audio_mode === "default") {
+    warnings.push("audio_mode_standard");
+  }
+  if (isRawAudioNotHonored(sample.audio_mode_requested, sample.audio_settings)) {
+    warnings.push("audio_raw_not_honored");
   }
 
   return warnings;

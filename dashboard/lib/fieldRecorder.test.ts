@@ -102,7 +102,8 @@ describe("fieldRecorder", () => {
       speed_native_mps: 1.41,
       recorded_at_ms: nowMs,
       accel_magnitude: 9.8,
-      audio_mode: "default",
+      audio_mode: "raw",
+      audio_mode_requested: "raw",
       audio_settings: {
         echoCancellation: null,
         noiseSuppression: null,
@@ -327,6 +328,73 @@ describe("fieldRecorder", () => {
     });
     expect(warningsB.length).toBe(1);
     expect(warningsB[0]).toContain("jarak ke kos <= 750 m");
+  });
+
+  it("pengaman kualitas audio: memicu dan tidak memicu audio_digital_silence, audio_mode_standard, dan audio_raw_not_honored", () => {
+    const baseCleanRaw = {
+      local_time: "09:00",
+      lat: -7.0502,
+      lon: 110.4398,
+      db: 55.0,
+      rms: computeConsistentRms(55.0),
+      label: "SEDANG_KULIAH" as const,
+      audio_mode: "raw" as const,
+      audio_mode_requested: "raw" as const,
+      audio_settings: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+    };
+
+    // Sampel raw, db 55, settings semua false -> tidak menghasilkan satu pun dari tiga peringatan baru
+    expect(checkConsistency(baseCleanRaw)).toEqual([]);
+
+    // 1. audio_digital_silence: memicu saat db <= 1 atau rms < 1e-4; tidak memicu saat db normal (55) dan rms >= 1e-4
+    expect(
+      checkConsistency({
+        ...baseCleanRaw,
+        db: 0.0,
+        rms: 1e-5,
+      })
+    ).toContain("audio_digital_silence");
+    expect(
+      checkConsistency({
+        ...baseCleanRaw,
+        db: 18.0, // rms = 10^((18-100)/20) = 10^-4.1 < 1e-4
+        rms: computeConsistentRms(18.0),
+      })
+    ).toContain("audio_digital_silence");
+    expect(checkConsistency(baseCleanRaw)).not.toContain(
+      "audio_digital_silence"
+    );
+
+    // 2. audio_mode_standard: memicu saat audio_mode === "default"; tidak memicu saat audio_mode === "raw"
+    expect(
+      checkConsistency({
+        ...baseCleanRaw,
+        audio_mode: "default",
+        audio_mode_requested: "default",
+      })
+    ).toContain("audio_mode_standard");
+    expect(checkConsistency(baseCleanRaw)).not.toContain("audio_mode_standard");
+
+    // 3. audio_raw_not_honored: memicu saat audio_mode_requested === "raw" tetapi salah satu EC/NS/AGC bernilai true;
+    // tidak memicu saat semuanya false atau null
+    expect(
+      checkConsistency({
+        ...baseCleanRaw,
+        audio_mode_requested: "raw",
+        audio_settings: {
+          echoCancellation: false,
+          noiseSuppression: true,
+          autoGainControl: false,
+        },
+      })
+    ).toContain("audio_raw_not_honored");
+    expect(checkConsistency(baseCleanRaw)).not.toContain(
+      "audio_raw_not_honored"
+    );
   });
 
   it("toFilename dan buildFile menghasilkan nama dan struktur file yang benar", () => {
