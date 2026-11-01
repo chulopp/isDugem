@@ -21,6 +21,7 @@ import {
 } from "@/lib/mqttTopics";
 import { AnakTelemetry, OrtuTelemetry, TimeMode } from "@/lib/types";
 import { getSimulatedTimestampMs } from "@/lib/mockData";
+import { createSpeedTracker } from "@/lib/speed";
 
 function playAlertTone(isAlarm: boolean) {
   try {
@@ -74,6 +75,7 @@ export default function AnakEdgePage() {
   });
   const [audioData, setAudioData] = useState({ rms: 0.012, db: 48.0 });
   const [accelMag, setAccelMag] = useState(9.8);
+  const [speedMps, setSpeedMps] = useState(0);
 
   // Telemetri Lokasi & Gerak Orang Tua dari MQTT
   const [latestOrtu, setLatestOrtu] = useState<OrtuTelemetry | null>(null);
@@ -99,6 +101,7 @@ export default function AnakEdgePage() {
     realLat: -7.0502,
     realLon: 110.4398,
     realAcc: 8.0,
+    nativeSpeed: null as number | null,
     rms: 0.012,
     db: 48.0,
     accel: 9.8,
@@ -115,6 +118,8 @@ export default function AnakEdgePage() {
   const lastPublishedDbRef = useRef<number>(48.0);
   const lastPublishedZoneRef = useRef<number>(getAudioZone(48.0));
   const publishTelemetryNowRef = useRef<() => void>(() => {});
+  const speedTrackerRef = useRef(createSpeedTracker());
+  const lastSpeedUiUpdateMsRef = useRef<number>(0);
 
   const watchIdRef = useRef<number | null>(null);
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -234,6 +239,17 @@ export default function AnakEdgePage() {
       Math.pow(10, (stateRef.current.db - 100) / 20).toFixed(6)
     );
 
+    const nowMs = Date.now();
+    const speed_mps =
+      stateRef.current.lockedSpotId !== "gps_asli"
+        ? 0
+        : speedTrackerRef.current.getSpeed(nowMs);
+
+    if (nowMs - lastSpeedUiUpdateMsRef.current >= 1000) {
+      lastSpeedUiUpdateMsRef.current = nowMs;
+      setSpeedMps(speed_mps);
+    }
+
     const payload: AnakTelemetry = {
       device_id: "anak",
       sequence: nextSeq,
@@ -242,6 +258,7 @@ export default function AnakEdgePage() {
         lat: stateRef.current.lat,
         lon: stateRef.current.lon,
         accuracy_m: stateRef.current.accuracy_m,
+        speed_mps,
       },
       audio: {
         rms: consistentRms,
@@ -252,7 +269,7 @@ export default function AnakEdgePage() {
       },
     };
 
-    lastPublishMsRef.current = Date.now();
+    lastPublishMsRef.current = nowMs;
     lastPublishedDbRef.current = stateRef.current.db;
     lastPublishedZoneRef.current = getAudioZone(stateRef.current.db);
     publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
@@ -287,8 +304,44 @@ export default function AnakEdgePage() {
       window.removeEventListener("devicemotion", motionHandlerRef.current);
       motionHandlerRef.current = null;
     }
+    speedTrackerRef.current.reset();
+    lastSpeedUiUpdateMsRef.current = 0;
+    setSpeedMps(0);
     setSensorActive(false);
   }, []);
+
+  const handlePosition = useCallback(
+    (pos: GeolocationPosition, isInitial: boolean = false) => {
+      const lat = Number(pos.coords.latitude.toFixed(6));
+      const lon = Number(pos.coords.longitude.toFixed(6));
+      const acc = Number((pos.coords.accuracy || 8).toFixed(1));
+      stateRef.current.realLat = lat;
+      stateRef.current.realLon = lon;
+      stateRef.current.realAcc = acc;
+      stateRef.current.nativeSpeed = pos.coords.speed ?? null;
+
+      speedTrackerRef.current.update(
+        {
+          lat,
+          lon,
+          accuracy_m: acc,
+          timestamp_ms: pos.timestamp,
+        },
+        Date.now()
+      );
+
+      if (stateRef.current.lockedSpotId === "gps_asli") {
+        stateRef.current.lat = lat;
+        stateRef.current.lon = lon;
+        stateRef.current.accuracy_m = acc;
+        setGpsCoords({ lat, lon, accuracy_m: acc });
+        if (isInitial) {
+          publishTelemetryNowRef.current();
+        }
+      }
+    },
+    []
+  );
 
   const startSensors = async () => {
     setSensorActive(true);
@@ -296,42 +349,13 @@ export default function AnakEdgePage() {
     // 1. Geolocation API (Memakai stateRef.current.lockedSpotId agar tidak terkena stale closure)
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = Number(pos.coords.latitude.toFixed(6));
-          const lon = Number(pos.coords.longitude.toFixed(6));
-          const acc = Number((pos.coords.accuracy || 8).toFixed(1));
-          stateRef.current.realLat = lat;
-          stateRef.current.realLon = lon;
-          stateRef.current.realAcc = acc;
-
-          if (stateRef.current.lockedSpotId === "gps_asli") {
-            stateRef.current.lat = lat;
-            stateRef.current.lon = lon;
-            stateRef.current.accuracy_m = acc;
-            setGpsCoords({ lat, lon, accuracy_m: acc });
-            publishTelemetryNowRef.current();
-          }
-        },
+        (pos) => handlePosition(pos, true),
         () => {},
         { enableHighAccuracy: true, timeout: 5000 }
       );
 
       watchIdRef.current = navigator.geolocation.watchPosition(
-        (pos) => {
-          const lat = Number(pos.coords.latitude.toFixed(6));
-          const lon = Number(pos.coords.longitude.toFixed(6));
-          const acc = Number((pos.coords.accuracy || 8).toFixed(1));
-          stateRef.current.realLat = lat;
-          stateRef.current.realLon = lon;
-          stateRef.current.realAcc = acc;
-
-          if (stateRef.current.lockedSpotId === "gps_asli") {
-            stateRef.current.lat = lat;
-            stateRef.current.lon = lon;
-            stateRef.current.accuracy_m = acc;
-            setGpsCoords({ lat, lon, accuracy_m: acc });
-          }
-        },
+        (pos) => handlePosition(pos, false),
         () => {
           // Gunakan koordinat terakhir jika gagal izin GPS
         },
@@ -645,7 +669,10 @@ export default function AnakEdgePage() {
               <p className="text-xs font-bold text-slate-900">
                 {accelMag.toFixed(1)} m/s²
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">Accelerometer</p>
+              <p className="text-[10px] font-medium text-slate-600 mt-0.5 truncate">
+                Kecepatan {speedMps.toFixed(2)} m/s
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Accelerometer</p>
             </div>
           </div>
         </div>
