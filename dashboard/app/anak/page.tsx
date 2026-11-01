@@ -38,6 +38,8 @@ interface PerformanceMemoryLike {
 
 interface DebugSnapshot {
   sentCount: number;
+  skippedCount: number;
+  disconnectCount: number;
   avgIntervalMs: number | null;
   maxGapMs: number;
   sessionElapsedS: number;
@@ -104,6 +106,8 @@ export default function AnakEdgePage() {
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot>({
     sentCount: 0,
+    skippedCount: 0,
+    disconnectCount: 0,
     avgIntervalMs: null,
     maxGapMs: 0,
     sessionElapsedS: 0,
@@ -138,12 +142,16 @@ export default function AnakEdgePage() {
   // Ring buffer ukuran tetap (maksimal 10 interval publish terakhir) & agregat berjalan
   const diagStatsRef = useRef({
     sessionStartMs: null as number | null,
+    sentCount: 0,
+    skippedCount: 0,
+    disconnectCount: 0,
     intervalsRing: new Float64Array(10),
     ringIndex: 0,
     ringCount: 0,
     maxGapMs: 0,
     lastUiUpdateMs: 0,
   });
+  const prevConnectedRef = useRef<boolean>(false);
 
   const lastPublishMsRef = useRef<number>(0);
   const lastPublishedDbRef = useRef<number>(48.0);
@@ -400,6 +408,18 @@ export default function AnakEdgePage() {
 
   const { isConnected, publishRaw } = useMqtt(mqttHandlers);
 
+  // Catat jumlah kali isConnected berubah dari true ke false sejak sensor dimulai
+  useEffect(() => {
+    if (
+      prevConnectedRef.current &&
+      !isConnected &&
+      sensorRunningRef.current
+    ) {
+      diagStatsRef.current.disconnectCount += 1;
+    }
+    prevConnectedRef.current = isConnected;
+  }, [isConnected]);
+
   const publishTelemetryNow = useCallback(() => {
     if (stateRef.current.lockedSpotId !== "gps_asli") {
       const lockedSpot = POI_SPOTS.find(
@@ -455,6 +475,35 @@ export default function AnakEdgePage() {
       setSpeedMps(speed_mps);
     }
 
+    const payload: AnakTelemetry = {
+      device_id: "anak",
+      sequence: nextSeq,
+      sent_at_ms: sentAtMs,
+      location: {
+        lat: stateRef.current.lat,
+        lon: stateRef.current.lon,
+        accuracy_m: stateRef.current.accuracy_m,
+        speed_mps,
+      },
+      audio: {
+        rms: consistentRms,
+        db: stateRef.current.db,
+      },
+      motion: {
+        accel_magnitude: stateRef.current.accel,
+      },
+    };
+
+    lastPublishMsRef.current = nowMs;
+    lastPublishedDbRef.current = stateRef.current.db;
+    lastPublishedZoneRef.current = getAudioZone(stateRef.current.db);
+    const publishedOk = publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
+    if (publishedOk) {
+      diagStatsRef.current.sentCount += 1;
+    } else {
+      diagStatsRef.current.skippedCount += 1;
+    }
+
     // Update panel debug maksimal 1x per detik
     if (nowMs - diagStatsRef.current.lastUiUpdateMs >= 1000) {
       diagStatsRef.current.lastUiUpdateMs = nowMs;
@@ -496,7 +545,9 @@ export default function AnakEdgePage() {
           : null;
 
       setDebugSnapshot({
-        sentCount: stateRef.current.localCount,
+        sentCount: ring.sentCount,
+        skippedCount: ring.skippedCount,
+        disconnectCount: ring.disconnectCount,
         avgIntervalMs,
         maxGapMs: Math.round(ring.maxGapMs),
         sessionElapsedS,
@@ -507,30 +558,6 @@ export default function AnakEdgePage() {
         gpsFixAgeS,
       });
     }
-
-    const payload: AnakTelemetry = {
-      device_id: "anak",
-      sequence: nextSeq,
-      sent_at_ms: sentAtMs,
-      location: {
-        lat: stateRef.current.lat,
-        lon: stateRef.current.lon,
-        accuracy_m: stateRef.current.accuracy_m,
-        speed_mps,
-      },
-      audio: {
-        rms: consistentRms,
-        db: stateRef.current.db,
-      },
-      motion: {
-        accel_magnitude: stateRef.current.accel,
-      },
-    };
-
-    lastPublishMsRef.current = nowMs;
-    lastPublishedDbRef.current = stateRef.current.db;
-    lastPublishedZoneRef.current = getAudioZone(stateRef.current.db);
-    publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
   }, [publishRaw]);
 
   useEffect(() => {
@@ -568,8 +595,28 @@ export default function AnakEdgePage() {
     releaseWakeLock();
     speedTrackerRef.current.reset();
     lastSpeedUiUpdateMsRef.current = 0;
+    lastPublishMsRef.current = 0;
+    stateRef.current.localCount = 0;
     diagStatsRef.current.sessionStartMs = null;
+    diagStatsRef.current.sentCount = 0;
+    diagStatsRef.current.skippedCount = 0;
+    diagStatsRef.current.disconnectCount = 0;
+    diagStatsRef.current.ringIndex = 0;
+    diagStatsRef.current.ringCount = 0;
+    diagStatsRef.current.maxGapMs = 0;
+    diagStatsRef.current.lastUiUpdateMs = 0;
+    setSequence(0);
     setSpeedMps(0);
+    setDebugSnapshot((prev) => ({
+      ...prev,
+      sentCount: 0,
+      skippedCount: 0,
+      disconnectCount: 0,
+      avgIntervalMs: null,
+      maxGapMs: 0,
+      sessionElapsedS: 0,
+      speedMps: 0,
+    }));
     setSensorActive(false);
   }, [releaseWakeLock]);
 
@@ -621,7 +668,11 @@ export default function AnakEdgePage() {
 
     const startMs = Date.now();
     lastPublishMsRef.current = 0;
+    stateRef.current.localCount = 0;
     diagStatsRef.current.sessionStartMs = startMs;
+    diagStatsRef.current.sentCount = 0;
+    diagStatsRef.current.skippedCount = 0;
+    diagStatsRef.current.disconnectCount = 0;
     diagStatsRef.current.ringIndex = 0;
     diagStatsRef.current.ringCount = 0;
     diagStatsRef.current.maxGapMs = 0;
@@ -1220,8 +1271,32 @@ export default function AnakEdgePage() {
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               <div>
-                <span className="text-slate-400">Paket terkirim:</span>{" "}
-                <span className="font-bold">{debugSnapshot.sentCount}</span>
+                <span className="text-slate-400">Terkirim (true):</span>{" "}
+                <span className="font-bold text-emerald-300">
+                  {debugSnapshot.sentCount}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Dilewati (false):</span>{" "}
+                <span className="font-bold text-amber-300">
+                  {debugSnapshot.skippedCount}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Putus koneksi:</span>{" "}
+                <span className="font-bold text-rose-300">
+                  {debugSnapshot.disconnectCount}x
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Status MQTT:</span>{" "}
+                <span
+                  className={`font-bold ${
+                    isConnected ? "text-emerald-300" : "text-amber-300"
+                  }`}
+                >
+                  {isConnected ? "Terhubung" : "Terputus"}
+                </span>
               </div>
               <div>
                 <span className="text-slate-400">Rata2 (10 pub):</span>{" "}
