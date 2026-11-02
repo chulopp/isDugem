@@ -71,7 +71,9 @@ export function useTelemetryStore() {
   const [activeRouteCoords, setActiveRouteCoords] = useState<
     [number, number][]
   >([]);
-  const [speedKmh, setSpeedKmh] = useState<number>(0);
+  const [speedMps, setSpeedMps] = useState<number | null>(null);
+  const [speedKmh, setSpeedKmh] = useState<number | null>(null);
+  const [lastAnakSeenMs, setLastAnakSeenMs] = useState<number>(0);
 
   const prevLocRef = useRef<{
     lat: number;
@@ -153,22 +155,21 @@ export function useTelemetryStore() {
         setActiveTimeLabel(tLabel);
       }
 
-      const prev = prevLocRef.current;
-      if (prev) {
-        const distMovedM = haversineDistanceM(
-          prev.lat,
-          prev.lon,
-          payload.location.lat,
-          payload.location.lon
-        );
-        const dtSec = Math.max(0.5, (now - prev.time) / 1000);
-        const calcSpeed =
-          distMovedM > 1.2
-            ? Math.min(95, Math.round((distMovedM / dtSec) * 3.6))
-            : 0;
-        setSpeedKmh(calcSpeed);
+      setLastAnakSeenMs(now);
+
+      const rawSpeed = payload.location.speed_mps;
+      if (
+        typeof rawSpeed === "number" &&
+        Number.isFinite(rawSpeed) &&
+        rawSpeed >= 0
+      ) {
+        const clampedMps = Math.min(60, Math.max(0, rawSpeed));
+        const roundedMps = Number(clampedMps.toFixed(2));
+        setSpeedMps(roundedMps);
+        setSpeedKmh(Number((roundedMps * 3.6).toFixed(1)));
       } else {
-        setSpeedKmh(0);
+        setSpeedMps(null);
+        setSpeedKmh(null);
       }
 
       prevLocRef.current = {
@@ -262,13 +263,28 @@ export function useTelemetryStore() {
               ? "warning"
               : "normal";
 
+          const metaParts: string[] = [];
+          if (alertPayload.ml_meta) {
+            metaParts.push(
+              `ML ${(alertPayload.ml_meta.confidence * 100).toFixed(1)}%`
+            );
+            if (alertPayload.ml_meta.is_anomaly) {
+              metaParts.push("Anomali IF");
+            }
+          }
+          if (alertPayload.context?.distance_m !== undefined) {
+            metaParts.push(`Jarak ${alertPayload.context.distance_m} m`);
+          }
+
           addEventLog({
-            sender: "Server Decision Engine",
+            sender: alertPayload.ml_meta
+              ? "Server ML Engine"
+              : "Server Decision Engine",
             role: "server",
             title: alertPayload.status,
             message: alertPayload.reason,
             severity: sev,
-            meta: `Jarak ${alertPayload.context?.distance_m ?? 0} m`,
+            meta: metaParts.join(" | ") || "Server Alert",
           });
         }
         return alertPayload;
@@ -295,7 +311,9 @@ export function useTelemetryStore() {
     activeRouteCoords,
     setActiveRouteCoords,
     clearTrail,
+    speedMps,
     speedKmh,
+    lastAnakSeenMs,
     ingestAnakTelemetry,
     ingestOrtuTelemetry,
     ingestServerAlert,

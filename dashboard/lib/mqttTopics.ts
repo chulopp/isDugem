@@ -130,6 +130,47 @@ export const MACRO_ZONES = [
   },
 ];
 
+export const SERVER_POI_CENTERS = {
+  kampus: { lat: -7.0502, lon: 110.4398, radius_m: 150 },
+  masjid: { lat: -7.0552, lon: 110.4370, radius_m: 100 },
+  kos: { lat: -7.0632, lon: 110.4385, radius_m: 750 },
+  bar: { lat: -6.966984, lon: 110.429807, radius_m: 250 },
+} as const;
+
+export function computeDistancesToServerPois(lat: number, lon: number) {
+  const distKampus = haversineDistanceM(
+    lat,
+    lon,
+    SERVER_POI_CENTERS.kampus.lat,
+    SERVER_POI_CENTERS.kampus.lon
+  );
+  const distMasjid = haversineDistanceM(
+    lat,
+    lon,
+    SERVER_POI_CENTERS.masjid.lat,
+    SERVER_POI_CENTERS.masjid.lon
+  );
+  const distKos = haversineDistanceM(
+    lat,
+    lon,
+    SERVER_POI_CENTERS.kos.lat,
+    SERVER_POI_CENTERS.kos.lon
+  );
+  const distBar = haversineDistanceM(
+    lat,
+    lon,
+    SERVER_POI_CENTERS.bar.lat,
+    SERVER_POI_CENTERS.bar.lon
+  );
+
+  return {
+    distKampus,
+    distMasjid,
+    distKos,
+    distBar,
+  };
+}
+
 export function getRealtimeTimeLabel(date: Date = new Date()): TimeLabel {
   const totalMinutes = date.getHours() * 60 + date.getMinutes();
 
@@ -213,46 +254,41 @@ export function evaluateTelemetryLocally(
   db: number,
   timeLabel: TimeLabel
 ): Alert {
-  const {
-    distKampus,
-    distMasjid,
-    distKos,
-    distBar,
-    nearestSpot,
-    nearestSpotDist,
-  } = computeDistancesToCategories(lat, lon);
+  const { distKampus, distMasjid, distKos, distBar } =
+    computeDistancesToServerPois(lat, lon);
+  const { nearestSpot, nearestSpotDist } = computeDistancesToCategories(lat, lon);
 
-  const claimedAtKos = distKos <= 750.0;
+  const claimedAtKos = distKos <= SERVER_POI_CENTERS.kos.radius_m;
   let status: AlertStatus = "NORMAL";
 
   if (timeLabel === "jam_malam") {
     if (claimedAtKos && db > 80.0) {
       status = "ANOMALY_FAKE_GPS";
-    } else if (distBar <= 250.0 && db > 75.0) {
+    } else if (distBar <= SERVER_POI_CENTERS.bar.radius_m && db > 75.0) {
       status = "CRITICAL_TERDETEKSI_DI_BAR";
-    } else if (distKos <= 750.0 && db < 55.0) {
+    } else if (distKos <= SERVER_POI_CENTERS.kos.radius_m && db < 55.0) {
       status = "ISTIRAHAT_DI_KOS";
     }
   } else if (timeLabel === "jam_kuliah") {
-    if (distKampus <= 150.0 && db < 65.0) {
+    if (distKampus <= SERVER_POI_CENTERS.kampus.radius_m && db < 65.0) {
       status = "SEDANG_KULIAH";
-    } else if (distKampus > 150.0) {
+    } else if (distKampus > SERVER_POI_CENTERS.kampus.radius_m) {
       status = "ALERT_BOLOS_KULIAH";
     }
   } else if (timeLabel === "waktu_sholat") {
-    if (distMasjid > 100.0) {
+    if (distMasjid > SERVER_POI_CENTERS.masjid.radius_m) {
       status = "WARNING_BELUM_KE_MASJID";
     }
   }
 
   const reasonMap: Record<AlertStatus, string> = {
-    SEDANG_KULIAH: `Posisi di Kampus UNDIP (${Math.round(distKampus)} m), suara ${db.toFixed(1)} dB.`,
-    ALERT_BOLOS_KULIAH: `Di luar Kampus UNDIP (${Math.round(distKampus)} m) saat jam kuliah.`,
-    WARNING_BELUM_KE_MASJID: `Di luar Masjid Kampus (${Math.round(distMasjid)} m) saat waktu sholat.`,
-    ISTIRAHAT_DI_KOS: `Posisi di ${nearestSpot.name} (${Math.round(distKos)} m), suara ${db.toFixed(1)} dB.`,
-    CRITICAL_TERDETEKSI_DI_BAR: `Terdeteksi di ${nearestSpot.name} (${Math.round(distBar)} m), suara ${db.toFixed(1)} dB.`,
-    ANOMALY_FAKE_GPS: `Lokasi klaim di ${nearestSpot.name} (${Math.round(distKos)} m), tetapi suara ${db.toFixed(1)} dB. Indikasi Fake GPS.`,
-    NORMAL: `Posisi terdekat ${nearestSpot.name} (${Math.round(nearestSpotDist)} m), suara ${db.toFixed(1)} dB.`,
+    SEDANG_KULIAH: `Pratinjau lokal: Posisi di Kampus UNDIP (${Math.round(distKampus)} m), suara ${db.toFixed(1)} dB.`,
+    ALERT_BOLOS_KULIAH: `Pratinjau lokal: Di luar Kampus UNDIP (${Math.round(distKampus)} m) saat jam kuliah.`,
+    WARNING_BELUM_KE_MASJID: `Pratinjau lokal: Di luar Masjid Kampus (${Math.round(distMasjid)} m) saat waktu sholat.`,
+    ISTIRAHAT_DI_KOS: `Pratinjau lokal: Posisi di zona kos (${Math.round(distKos)} m), suara ${db.toFixed(1)} dB.`,
+    CRITICAL_TERDETEKSI_DI_BAR: `Pratinjau lokal: Terdeteksi di zona bar (${Math.round(distBar)} m), suara ${db.toFixed(1)} dB.`,
+    ANOMALY_FAKE_GPS: `Pratinjau lokal: Lokasi klaim di zona kos (${Math.round(distKos)} m), tetapi suara ${db.toFixed(1)} dB. Indikasi Fake GPS.`,
+    NORMAL: `Pratinjau lokal: Posisi terdekat ${nearestSpot.name} (${Math.round(nearestSpotDist)} m), suara ${db.toFixed(1)} dB.`,
   };
 
   return {

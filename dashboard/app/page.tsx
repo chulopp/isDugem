@@ -9,6 +9,7 @@ import HistoryChart from "@/components/HistoryChart";
 import DemoPresetPanel from "@/components/DemoPresetPanel";
 import SystemControlPanel from "@/components/SystemControlPanel";
 import QrConnectModal from "@/components/QrConnectModal";
+import MlXaiPanel from "@/components/MlXaiPanel";
 import { useTelemetryStore } from "@/hooks/useTelemetryStore";
 import { useMqtt } from "@/hooks/useMqtt";
 import { MQTT_TOPICS, POI_SPOTS, haversineDistanceM } from "@/lib/mqttTopics";
@@ -129,7 +130,9 @@ export default function DashboardPage() {
     activeRouteCoords,
     setActiveRouteCoords,
     clearTrail,
+    speedMps,
     speedKmh,
+    lastAnakSeenMs,
     ingestAnakTelemetry,
     ingestOrtuTelemetry,
     ingestServerAlert,
@@ -241,6 +244,7 @@ export default function DashboardPage() {
           lat: preset.lat,
           lon: preset.lon,
           accuracy_m: 5.0,
+          speed_mps: 0,
         },
         audio: {
           rms,
@@ -319,6 +323,7 @@ export default function DashboardPage() {
           lat: spot.lat,
           lon: spot.lon,
           accuracy_m: 6.0,
+          speed_mps: 0,
         },
         audio: {
           rms,
@@ -397,6 +402,14 @@ export default function DashboardPage() {
           route.time_label,
           nextSeq
         );
+        const isWalkingRoute = route.id.includes("kos") || route.id.includes("masjid");
+        let stepSpeedMps = isWalkingRoute ? 1.4 : 9.5;
+        if (isNearEnd) {
+          stepSpeedMps = 0;
+        } else {
+          stepSpeedMps = Number((stepSpeedMps + Math.sin(idx * 0.5) * 0.3).toFixed(2));
+        }
+
         const payload: AnakTelemetry = {
           device_id: "anak",
           sequence: nextSeq,
@@ -405,13 +418,14 @@ export default function DashboardPage() {
             lat: Number(lat.toFixed(6)),
             lon: Number(lon.toFixed(6)),
             accuracy_m: 7.5,
+            speed_mps: stepSpeedMps,
           },
           audio: {
             rms,
             db: Number(currentDb.toFixed(1)),
           },
           motion: {
-            accel_magnitude: isNearEnd ? 9.8 : 13.4,
+            accel_magnitude: isNearEnd ? 9.8 : (isWalkingRoute ? 10.5 : 12.8),
           },
         };
 
@@ -655,6 +669,7 @@ export default function DashboardPage() {
           <KpiStrip
             telemetry={latestTelemetry}
             alert={latestAlert}
+            speedMps={speedMps}
             speedKmh={speedKmh}
           />
 
@@ -701,6 +716,11 @@ export default function DashboardPage() {
 
           {activeTab === "analytics" && (
             <>
+              <MlXaiPanel
+                telemetry={latestTelemetry}
+                alert={latestAlert}
+                activeTimeLabel={activeTimeLabel}
+              />
               <HistoryChart data={history} />
               <DemoPresetPanel
                 activePresetId={activePresetId}
@@ -737,6 +757,7 @@ export default function DashboardPage() {
           ortuTelemetry={latestOrtuTelemetry}
           alert={latestAlert}
           events={events}
+          lastAnakSeenMs={lastAnakSeenMs}
           onClearEvents={clearEvents}
           onSendCommand={handleSendCommand}
         />

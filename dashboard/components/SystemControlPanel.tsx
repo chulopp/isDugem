@@ -24,6 +24,7 @@ interface SystemControlPanelProps {
   ortuTelemetry: OrtuTelemetry | null;
   alert: Alert;
   events: SystemEventLog[];
+  lastAnakSeenMs?: number;
   onClearEvents?: () => void;
   onSendCommand: (
     type: "ping" | "reminder" | "alarm",
@@ -36,6 +37,7 @@ export default function SystemControlPanel({
   ortuTelemetry,
   alert,
   events,
+  lastAnakSeenMs,
   onClearEvents,
   onSendCommand,
 }: SystemControlPanelProps) {
@@ -129,32 +131,63 @@ export default function SystemControlPanel({
             </p>
           )}
 
-          {/* Status Perangkat Edge 2 (Ortu: GPS + Shake) */}
-          <div className="mt-4 pt-3 border-t border-slate-200/80 space-y-1 text-[11px] text-slate-600">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Radio className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span>Edge Ortu (GPS + Shake)</span>
-              </span>
-              <span
-                className={`font-semibold shrink-0 ${
-                  ortuTelemetry ? "text-emerald-700" : "text-slate-800"
-                }`}
-              >
-                {ortuTelemetry ? "Aktif (Live)" : "Siap Menerima"}
-              </span>
-            </div>
-            {ortuTelemetry && (
-              <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
-                <span>
-                  GPS: {ortuTelemetry.location.lat.toFixed(4)},{" "}
-                  {ortuTelemetry.location.lon.toFixed(4)}
+          {/* Status Perangkat Edge (Anak & Ortu) */}
+          <div className="mt-4 pt-3 border-t border-slate-200/80 space-y-2 text-[11px] text-slate-600">
+            {/* Status Perangkat Edge 1 (Anak) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Smartphone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  <span>Edge Anak (GPS + Mic)</span>
                 </span>
-                <span>
-                  {ortuTelemetry.motion.accel_magnitude.toFixed(1)} m/s²
+                <span
+                  className={`font-semibold shrink-0 ${
+                    telemetry.sent_at_ms > 0 ? "text-emerald-700" : "text-slate-800"
+                  }`}
+                >
+                  {telemetry.sent_at_ms > 0 ? "Aktif (Live)" : "Siap Menerima"}
                 </span>
               </div>
-            )}
+              {telemetry.sent_at_ms > 0 && (
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                  <span>
+                    GPS: {telemetry.location.lat.toFixed(4)}, {telemetry.location.lon.toFixed(4)}
+                  </span>
+                  <span>
+                    {typeof telemetry.location.speed_mps === "number"
+                      ? `${telemetry.location.speed_mps.toFixed(1)} m/s`
+                      : `${telemetry.audio.db.toFixed(1)} dB`}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Status Perangkat Edge 2 (Ortu) */}
+            <div className="space-y-1 pt-2 border-t border-slate-200/50">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Radio className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  <span>Edge Ortu (GPS + Shake)</span>
+                </span>
+                <span
+                  className={`font-semibold shrink-0 ${
+                    ortuTelemetry ? "text-emerald-700" : "text-slate-800"
+                  }`}
+                >
+                  {ortuTelemetry ? "Aktif (Live)" : "Siap Menerima"}
+                </span>
+              </div>
+              {ortuTelemetry && (
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                  <span>
+                    GPS: {ortuTelemetry.location.lat.toFixed(4)}, {ortuTelemetry.location.lon.toFixed(4)}
+                  </span>
+                  <span>
+                    {ortuTelemetry.motion.accel_magnitude.toFixed(1)} m/s²
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
