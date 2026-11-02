@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ShieldAlert, ShieldCheck, Volume2, Navigation, Brain, Sparkles, Activity } from "lucide-react";
+import { ShieldAlert, ShieldCheck, Volume2, Navigation } from "lucide-react";
 import { Alert, AnakTelemetry } from "@/lib/types";
 import {
   STATUS_DISPLAY,
@@ -56,9 +56,9 @@ export default function KpiStrip({
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 md:gap-3 xl:gap-4 py-3 px-3.5 sm:px-4.5 rounded-3xl bg-white/80 backdrop-blur-xl border border-slate-200/80 shadow-glass">
-        {/* KPI 1: Status Sistem & Mesin AI */}
+        {/* KPI 1: Status Sistem & Keyakinan Model */}
         <div className="flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-200/70 pb-2.5 md:pb-0 md:pr-2.5 xl:pr-4 min-w-0 overflow-hidden">
-          {/* Baris Atas: Ikon + Label & Engine Badge */}
+          {/* Baris Atas: Ikon + Label (Status Sistem tanpa tertutup badge) */}
           <div className="flex items-center justify-between gap-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               {statusInfo.severity === "critical" ? (
@@ -71,26 +71,16 @@ export default function KpiStrip({
               </p>
             </div>
 
-            {/* Badge Mode Keputusan (ML vs Fallback vs Menunggu) */}
-            {isServerWaiting ? (
+            {/* Indikator hanya jika server sedang belum mengirimkan alert */}
+            {isServerWaiting && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0 animate-pulse" />
                 <span>Menunggu Server</span>
               </span>
-            ) : mlMeta ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shrink-0">
-                <Brain className="w-3 h-3 text-indigo-600 shrink-0" />
-                <span className="truncate max-w-[120px]">ML: Random Forest</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                <span className="truncate max-w-[120px]">Rule-Based</span>
-              </span>
             )}
           </div>
 
-          {/* Baris Tengah: Status Utama */}
+          {/* Baris Tengah: Status Utama Selebar Kolom */}
           <div className="mt-1.5 min-w-0">
             <span
               className="block text-xs sm:text-sm xl:text-base font-bold text-slate-900 tracking-tight truncate"
@@ -100,37 +90,31 @@ export default function KpiStrip({
             </span>
           </div>
 
-          {/* Baris Bawah: Skor Keyakinan & Anomali Isolation Forest */}
-          {mlMeta && !isServerWaiting && (
-            <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-[11px]">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Sparkles className="w-3 h-3 text-indigo-600 shrink-0" />
-                <span className="text-slate-500 truncate">Keyakinan:</span>
-                <span className="font-bold text-indigo-700 shrink-0">
-                  {(mlMeta.confidence * 100).toFixed(1)}%
-                </span>
-                {/* Mini bar keyakinan */}
-                <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0 hidden sm:block">
+          {/* Baris Bawah: Tingkat Keyakinan Model yang Bersih dan Proporsional */}
+          <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
+            <span className="text-slate-500 font-medium shrink-0">
+              Keyakinan Model
+            </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-bold text-indigo-700 font-mono text-xs shrink-0">
+                {mlMeta
+                  ? `${(mlMeta.confidence * 100).toFixed(1)}%`
+                  : isServerWaiting
+                  ? "-"
+                  : "100%"}
+              </span>
+              {mlMeta && (
+                <div className="w-14 sm:w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
                   <div
                     className="h-full bg-indigo-600 rounded-full transition-all duration-300"
-                    style={{ width: `${Math.min(100, Math.max(10, mlMeta.confidence * 100))}%` }}
+                    style={{
+                      width: `${Math.min(100, Math.max(10, mlMeta.confidence * 100))}%`,
+                    }}
                   />
                 </div>
-              </div>
-
-              {/* Status Isolation Forest */}
-              <span
-                className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold shrink-0 ${
-                  mlMeta.is_anomaly
-                    ? "bg-rose-100 text-rose-800 border border-rose-200"
-                    : "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
-                }`}
-                title={`Skor Anomali Isolation Forest: ${mlMeta.anomaly_score.toFixed(4)} (< 0 = Outlier)`}
-              >
-                {mlMeta.is_anomaly ? "IF: Anomali" : "IF: Normal"}
-              </span>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         {/* KPI 2: Tingkat Suara (Audio Visualizer Raw) */}
