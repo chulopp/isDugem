@@ -34,6 +34,12 @@ import {
   resolveTelemetryTimestampMs,
   SensorSnapshotInput,
 } from "@/lib/fieldRecorder";
+import {
+  EVENT_MIN_GAP_MS,
+  getAudioZone,
+  shouldPublishOnAudioEvent,
+  shouldPublishOnPeriodicTick,
+} from "@/lib/publishPolicy";
 import FieldRecorder from "@/components/FieldRecorder";
 
 interface WakeLockSentinelLike {
@@ -51,6 +57,9 @@ interface PerformanceMemoryLike {
 
 interface DebugSnapshot {
   sentCount: number;
+  sentPeriodic: number;
+  sentEvent: number;
+  avgRatePps: number | null;
   skippedCount: number;
   disconnectCount: number;
   avgIntervalMs: number | null;
@@ -67,14 +76,6 @@ interface DebugSnapshot {
 }
 
 const SESSION_TARGET_S = 30 * 60; // 30 menit target sesi uji stabilitas
-
-function getAudioZone(db: number): number {
-  if (db < 55.0) return 0;
-  if (db < 65.0) return 1;
-  if (db <= 75.0) return 2;
-  if (db <= 80.0) return 3;
-  return 4;
-}
 
 function formatDurationMmSs(totalSeconds: number): string {
   const clamped = Math.max(0, Math.floor(totalSeconds));
@@ -125,6 +126,9 @@ export default function AnakEdgePage() {
   const isDebugModeRef = useRef(false);
   const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot>({
     sentCount: 0,
+    sentPeriodic: 0,
+    sentEvent: 0,
+    avgRatePps: null,
     skippedCount: 0,
     disconnectCount: 0,
     avgIntervalMs: null,
@@ -177,6 +181,8 @@ export default function AnakEdgePage() {
   const diagStatsRef = useRef({
     sessionStartMs: null as number | null,
     sentCount: 0,
+    sentPeriodic: 0,
+    sentEvent: 0,
     skippedCount: 0,
     disconnectCount: 0,
     intervalsRing: new Float64Array(10),
@@ -190,7 +196,7 @@ export default function AnakEdgePage() {
   const lastPublishMsRef = useRef<number>(0);
   const lastPublishedDbRef = useRef<number>(48.0);
   const lastPublishedZoneRef = useRef<number>(getAudioZone(48.0));
-  const publishTelemetryNowRef = useRef<() => void>(() => {});
+  const publishTelemetryNowRef = useRef<(source?: "periodic" | "event") => void>(() => {});
   const speedTrackerRef = useRef(createSpeedTracker());
   const lastSpeedUiUpdateMsRef = useRef<number>(0);
   const lastAccelUiUpdateMsRef = useRef<number>(0);
@@ -470,8 +476,9 @@ export default function AnakEdgePage() {
     prevConnectedRef.current = isConnected;
   }, [isConnected]);
 
-  const publishTelemetryNow = useCallback(() => {
-    if (stateRef.current.lockedSpotId !== "gps_asli") {
+  const publishTelemetryNow = useCallback(
+    (source: "periodic" | "event" = "periodic") => {
+      if (stateRef.current.lockedSpotId !== "gps_asli") {
       const lockedSpot = POI_SPOTS.find(
         (s) => s.id === stateRef.current.lockedSpotId
       );
@@ -549,6 +556,11 @@ export default function AnakEdgePage() {
     const publishedOk = publishRaw(MQTT_TOPICS.ANAK_TELEMETRY, payload);
     if (publishedOk) {
       diagStatsRef.current.sentCount += 1;
+      if (source === "event") {
+        diagStatsRef.current.sentEvent += 1;
+      } else {
+        diagStatsRef.current.sentPeriodic += 1;
+      }
     } else {
       diagStatsRef.current.skippedCount += 1;
     }
@@ -569,10 +581,13 @@ export default function AnakEdgePage() {
         avgIntervalMs = Math.round(sum / ring.ringCount);
       }
 
-      const sessionElapsedS =
-        ring.sessionStartMs !== null
-          ? Math.max(0, Math.floor((nowMs - ring.sessionStartMs) / 1000))
-          : 0;
+      const elapsedExactS =
+        ring.sessionStartMs !== null ? (nowMs - ring.sessionStartMs) / 1000 : 0;
+      const sessionElapsedS = Math.max(0, Math.floor(elapsedExactS));
+      const avgRatePps =
+        elapsedExactS >= 1
+          ? Number((ring.sentCount / elapsedExactS).toFixed(2))
+          : null;
 
       const perfMem =
         typeof performance !== "undefined"
@@ -598,6 +613,9 @@ export default function AnakEdgePage() {
 
       setDebugSnapshot({
         sentCount: ring.sentCount,
+        sentPeriodic: ring.sentPeriodic,
+        sentEvent: ring.sentEvent,
+        avgRatePps,
         skippedCount: ring.skippedCount,
         disconnectCount: ring.disconnectCount,
         avgIntervalMs,
@@ -660,6 +678,8 @@ export default function AnakEdgePage() {
     stateRef.current.localCount = 0;
     diagStatsRef.current.sessionStartMs = null;
     diagStatsRef.current.sentCount = 0;
+    diagStatsRef.current.sentPeriodic = 0;
+    diagStatsRef.current.sentEvent = 0;
     diagStatsRef.current.skippedCount = 0;
     diagStatsRef.current.disconnectCount = 0;
     diagStatsRef.current.ringIndex = 0;
@@ -672,6 +692,9 @@ export default function AnakEdgePage() {
       setDebugSnapshot((prev) => ({
         ...prev,
         sentCount: 0,
+        sentPeriodic: 0,
+        sentEvent: 0,
+        avgRatePps: null,
         skippedCount: 0,
         disconnectCount: 0,
         avgIntervalMs: null,
@@ -711,8 +734,8 @@ export default function AnakEdgePage() {
         stateRef.current.lon = lon;
         stateRef.current.accuracy_m = acc;
         setGpsCoords({ lat, lon, accuracy_m: acc });
-        if (isInitial) {
-          publishTelemetryNowRef.current();
+        if (isInitial && nowMs - lastPublishMsRef.current >= EVENT_MIN_GAP_MS) {
+          publishTelemetryNowRef.current("periodic");
         }
       }
     },
@@ -735,6 +758,8 @@ export default function AnakEdgePage() {
     stateRef.current.localCount = 0;
     diagStatsRef.current.sessionStartMs = startMs;
     diagStatsRef.current.sentCount = 0;
+    diagStatsRef.current.sentPeriodic = 0;
+    diagStatsRef.current.sentEvent = 0;
     diagStatsRef.current.skippedCount = 0;
     diagStatsRef.current.disconnectCount = 0;
     diagStatsRef.current.ringIndex = 0;
@@ -860,16 +885,16 @@ export default function AnakEdgePage() {
         stateRef.current.db = effectiveDb;
         setAudioData({ rms: effectiveRms, db: effectiveDb });
 
-        const currentZone = getAudioZone(effectiveDb);
-        const zoneChanged = currentZone !== lastPublishedZoneRef.current;
-        const dbJump =
-          Math.abs(effectiveDb - lastPublishedDbRef.current) >= 6.0;
-
         if (
-          (zoneChanged || dbJump) &&
-          nowMs - lastPublishMsRef.current >= 250
+          shouldPublishOnAudioEvent({
+            effectiveDb,
+            lastPublishedDb: lastPublishedDbRef.current,
+            lastPublishedZone: lastPublishedZoneRef.current,
+            nowMs,
+            lastPublishMs: lastPublishMsRef.current,
+          })
         ) {
-          publishTelemetryNowRef.current();
+          publishTelemetryNowRef.current("event");
         }
       }, 200);
     } catch {
@@ -969,14 +994,16 @@ export default function AnakEdgePage() {
       return;
     }
 
-    publishTelemetryNow();
+    publishTelemetryNow("periodic");
 
     // 4. Interval Pengiriman Telemetri MQTT Real-Time (Tiap 1 detik)
     if (pubIntervalRef.current) {
       clearInterval(pubIntervalRef.current);
     }
     pubIntervalRef.current = setInterval(() => {
-      publishTelemetryNowRef.current();
+      if (shouldPublishOnPeriodicTick(Date.now(), lastPublishMsRef.current)) {
+        publishTelemetryNowRef.current("periodic");
+      }
     }, 1000);
 
     sensorStartingRef.current = false;
@@ -1429,7 +1456,7 @@ export default function AnakEdgePage() {
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               <div>
-                <span className="text-slate-400">Terkirim (true):</span>{" "}
+                <span className="text-slate-400">Terkirim total:</span>{" "}
                 <span className="font-bold text-emerald-300">
                   {debugSnapshot.sentCount}
                 </span>
@@ -1438,6 +1465,24 @@ export default function AnakEdgePage() {
                 <span className="text-slate-400">Dilewati (false):</span>{" "}
                 <span className="font-bold text-amber-300">
                   {debugSnapshot.skippedCount}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Periodik / Kejadian:</span>{" "}
+                <span className="font-bold text-emerald-200">
+                  {debugSnapshot.sentPeriodic}
+                </span>
+                <span className="text-slate-500"> / </span>
+                <span className="font-bold text-cyan-300">
+                  {debugSnapshot.sentEvent}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Laju rata-rata:</span>{" "}
+                <span className="font-bold text-emerald-300">
+                  {debugSnapshot.avgRatePps !== null
+                    ? `${debugSnapshot.avgRatePps.toFixed(2)} paket/dtk`
+                    : "-"}
                 </span>
               </div>
               <div>
