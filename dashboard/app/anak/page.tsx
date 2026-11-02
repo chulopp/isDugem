@@ -905,7 +905,7 @@ export default function AnakEdgePage() {
       };
       // Tampilkan pesan kecil di UI tanpa menghentikan GPS dan telemetri
       setMicErrorNotice(
-        "Akses mikrofon ditolak/tidak tersedia — GPS & telemetri tetap berjalan dengan nilai dB terakhir."
+        "Akses mikrofon ditolak/tidak tersedia - GPS & telemetri tetap berjalan dengan nilai dB terakhir."
       );
     }
 
