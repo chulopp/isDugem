@@ -689,6 +689,12 @@ export default function DashboardPage() {
                 onJumpToSpot={handleJumpToSpot}
               />
 
+              <MlXaiPanel
+                telemetry={latestTelemetry}
+                alert={latestAlert}
+                activeTimeLabel={activeTimeLabel}
+              />
+
               <HistoryChart data={history} />
 
               <DemoPresetPanel
