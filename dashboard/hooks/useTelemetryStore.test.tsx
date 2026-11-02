@@ -148,4 +148,73 @@ describe("useTelemetryStore: alert backend", () => {
     expect(result.current.latestAlert.status).toBe("WARNING_BELUM_KE_MASJID");
     expect(result.current.latestAlert.reason).toBe("Jarak ke masjid 297m");
   });
+
+  it("membaca location.speed_mps dan mengonversi ke km/j tanpa lonjakan palsu", () => {
+    const { result } = renderHook(() => useTelemetryStore());
+
+    // 1. Awal tanpa speed_mps -> null
+    const tel1 = makeTelemetry();
+    act(() => {
+      result.current.ingestAnakTelemetry(tel1);
+    });
+    expect(result.current.speedMps).toBeNull();
+    expect(result.current.speedKmh).toBeNull();
+
+    // 2. Paket kedua menyertakan speed_mps: 4.5 m/s (16.2 km/j)
+    const tel2 = makeTelemetry();
+    tel2.sequence = 2;
+    tel2.location.speed_mps = 4.5;
+    act(() => {
+      result.current.ingestAnakTelemetry(tel2);
+    });
+    expect(result.current.speedMps).toBe(4.5);
+    expect(result.current.speedKmh).toBe(16.2);
+
+    // 3. Paket ketiga lompat koordinat jauh (simulasi lompat preset) tetapi speed_mps: 0 -> tetap 0
+    const tel3 = makeTelemetry();
+    tel3.sequence = 3;
+    tel3.location.lat = -6.968; // Area bar (jauh dari kampus)
+    tel3.location.lon = 110.4285;
+    tel3.location.speed_mps = 0;
+    act(() => {
+      result.current.ingestAnakTelemetry(tel3);
+    });
+    expect(result.current.speedMps).toBe(0);
+    expect(result.current.speedKmh).toBe(0);
+  });
+
+  it("mencatat metadata ML dan skor Isolation Forest pada event log", () => {
+    const { result } = renderHook(() => useTelemetryStore());
+    const mlAlert: Alert = {
+      status: "CRITICAL_TERDETEKSI_DI_BAR",
+      reason: "Probabilitas ML 95.8%: Dekat bar",
+      timestamp_ms: 5000,
+      context: {
+        time_label: "jam_malam",
+        nearest_poi: "bar",
+        distance_m: 42,
+        db: 82,
+      },
+      ml_meta: {
+        engine: "RandomForest+IsolationForest",
+        confidence: 0.958,
+        anomaly_score: -0.045,
+        is_anomaly: true,
+      },
+    };
+
+    act(() => {
+      result.current.ingestServerAlert(mlAlert);
+    });
+
+    expect(result.current.latestAlert.ml_meta).toEqual(mlAlert.ml_meta);
+    expect(result.current.events[0]).toMatchObject({
+      sender: "Server ML Engine",
+      role: "server",
+      title: "CRITICAL_TERDETEKSI_DI_BAR",
+      message: mlAlert.reason,
+      severity: "critical",
+      meta: "ML 95.8% | Anomali IF | Jarak 42 m",
+    });
+  });
 });

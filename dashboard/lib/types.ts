@@ -51,11 +51,19 @@ export interface AlertContext {
   db: number;
 }
 
+export interface MlMeta {
+  engine: string;
+  confidence: number;
+  anomaly_score: number;
+  is_anomaly: boolean;
+}
+
 export interface Alert {
   status: AlertStatus;
   reason: string;
   timestamp_ms: number;
   context: AlertContext;
+  ml_meta?: MlMeta;
 }
 
 export interface CommandPayload {

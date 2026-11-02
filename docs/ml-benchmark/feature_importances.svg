@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540">
+  <defs>
+    <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#38BDF8" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.1" />
+    </filter>
+  </defs>
+  <rect width="960" height="540" fill="#0F172A" rx="20" />
+  <text x="40" y="44" fill="#F8FAFC" font-size="20" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">Random Forest: Kontribusi Fitur Keputusan (Feature Importance)</text>
+  <text x="40" y="66" fill="#94A3B8" font-size="12" font-family="Segoe UI, Roboto, sans-serif">Explainable AI (XAI) untuk Verifikasi Transparansi Model Sistem isDugem</text>
+  <line x1="300" y1="97.0" x2="870" y2="97.0" stroke="#1E293B" stroke-dasharray="4 4" stroke-width="1" />
+  <text x="284" y="102.0" fill="#E2E8F0" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="600" text-anchor="end">Waktu Siklikal (Cosinus 24 Jam)</text>
+  <rect x="300" y="80" width="541.5" height="34" rx="7" fill="url(#barGrad)" filter="url(#shadow)" />
+  <text x="853.5" y="102.0" fill="#38BDF8" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">30.6%</text>
+  <line x1="300" y1="149.0" x2="870" y2="149.0" stroke="#1E293B" stroke-dasharray="4 4" stroke-width="1" />
+  <text x="284" y="154.0" fill="#E2E8F0" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="600" text-anchor="end">Tingkat Suara Suasana (dB SPL Raw)</text>
+  <rect x="300" y="132" width="324.8" height="34" rx="7" fill="url(#barGrad)" filter="url(#shadow)" />
+  <text x="636.8" y="154.0" fill="#38BDF8" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">18.3%</text>
+  <line x1="300" y1="201.0" x2="870" y2="201.0" stroke="#1E293B" stroke-dasharray="4 4" stroke-width="1" />
+  <text x="284" y="206.0" fill="#E2E8F0" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="600" text-anchor="end">Jarak ke Zona Kos Tembalang</text>
+  <rect x="300" y="184" width="201.9" height="34" rx="7" fill="url(#barGrad)" filter="url(#shadow)" />
+  <text x="513.9" y="206.0" fill="#38BDF8" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">11.4%</text>
+  <line x1="300" y1="253.0" x2="870" y2="253.0" stroke="#1E293B" stroke-dasharray="4 4" stroke-width="1" />
+  <text x="284" y="258.0" fill="#E2E8F0" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="600" text-anchor="end">Waktu Siklikal (Sinus 24 Jam)</text>
+  <rect x="300" y="236" width="200.7" height="34" rx="7" fill="url(#barGrad)" filter="url(#shadow)" />
+  <text x="512.7" y="258.0" fill="#38BDF8" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">11.3%</text>
+  <line x1="300" y1="305.0" x2="870" y2="305.0" stroke="#1E293B" stroke-dasharray="4 4" stroke-width="1" />
+  <text x="284" y="310.0" fill="#E2E8F0" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="600" text-anchor="end">Jarak ke Zona Hiburan Malam</text>
+  <rect x="300" y="288" width="190.7" height="34" rx="7" fill="url(#barGrad)" filter="url(#shadow)" />
+  <text x="502.7" y="310.0" fill="#38BDF8" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">10.8%</text>
+  <line x1="300" y1="357.0" x2="870" y2="357.0" stroke="#1E293B" stroke-dasharray="4 4" stroke-width="1" />
+  <text x="284" y="362.0" fill="#E2E8F0" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="600" text-anchor="end">Jarak ke Kampus UNDIP</text>
+  <rect x="300" y="340" width="184.1" height="34" rx="7" fill="url(#barGrad)" filter="url(#shadow)" />
+  <text x="496.1" y="362.0" fill="#38BDF8" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">10.4%</text>
+  <line x1="300" y1="409.0" x2="870" y2="409.0" stroke="#1E293B" stroke-dasharray="4 4" stroke-width="1" />
+  <text x="284" y="414.0" fill="#E2E8F0" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="600" text-anchor="end">Jarak ke Masjid Kampus</text>
+  <rect x="300" y="392" width="94.0" height="34" rx="7" fill="url(#barGrad)" filter="url(#shadow)" />
+  <text x="406.0" y="414.0" fill="#38BDF8" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">5.3%</text>
+  <line x1="300" y1="461.0" x2="870" y2="461.0" stroke="#1E293B" stroke-dasharray="4 4" stroke-width="1" />
+  <text x="284" y="466.0" fill="#E2E8F0" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="600" text-anchor="end">Kecepatan Pergerakan (GPS)</text>
+  <rect x="300" y="444" width="32.8" height="34" rx="7" fill="url(#barGrad)" filter="url(#shadow)" />
+  <text x="344.8" y="466.0" fill="#38BDF8" font-size="13" font-family="Segoe UI, Roboto, sans-serif" font-weight="700">1.9%</text>
+</svg>

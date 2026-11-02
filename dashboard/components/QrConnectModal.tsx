@@ -2,30 +2,71 @@
 
 import React, { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { X, Smartphone, Radio, ExternalLink } from "lucide-react";
+import {
+  X,
+  Smartphone,
+  Radio,
+  ExternalLink,
+  AlertTriangle,
+  Globe,
+  ShieldCheck,
+  Check,
+} from "lucide-react";
 
 interface QrConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const PRODUCTION_URL = "https://isdugem.vercel.app";
+
 export default function QrConnectModal({
   isOpen,
   onClose,
 }: QrConnectModalProps) {
-  const [origin, setOrigin] = useState("https://isdugem.vercel.app");
+  const [currentOrigin, setCurrentOrigin] = useState("https://isdugem.vercel.app");
+  const [selectedBaseUrl, setSelectedBaseUrl] = useState("https://isdugem.vercel.app");
+  const [customTunnelUrl, setCustomTunnelUrl] = useState("");
   const [activeMobileTab, setActiveMobileTab] = useState<"anak" | "ortu">("anak");
+  const [isInsecureOrigin, setIsInsecureOrigin] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setOrigin(window.location.origin);
+      const orig = window.location.origin;
+      setCurrentOrigin(orig);
+
+      const isInsecure =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.protocol === "http:";
+
+      setIsInsecureOrigin(isInsecure);
+
+      // Jika berjalan di localhost atau HTTP, arahkan default QR ke URL Vercel HTTPS
+      if (isInsecure) {
+        setSelectedBaseUrl(PRODUCTION_URL);
+      } else {
+        setSelectedBaseUrl(orig);
+      }
     }
   }, []);
 
   if (!isOpen) return null;
 
-  const anakUrl = `${origin}/anak`;
-  const ortuUrl = `${origin}/ortu`;
+  // Bersihkan trailing slash pada URL dasar
+  const normalizedBase = selectedBaseUrl.trim().replace(/\/+$/, "");
+  const anakUrl = `${normalizedBase}/anak`;
+  const ortuUrl = `${normalizedBase}/ortu`;
+
+  const handleApplyCustomTunnel = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = customTunnelUrl.trim().replace(/\/+$/, "");
+    if (!trimmed) return;
+    const finalUrl = trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? trimmed
+      : `https://${trimmed}`;
+    setSelectedBaseUrl(finalUrl);
+  };
 
   return (
     <div className="fixed inset-0 z-[1000] overflow-y-auto bg-slate-950/50 backdrop-blur-sm p-3.5 sm:p-4 flex items-center justify-center">
@@ -34,14 +75,14 @@ export default function QrConnectModal({
 
       {/* Kotak Modal */}
       <div className="relative w-full max-w-xl max-h-[92vh] flex flex-col rounded-3xl bg-white/95 backdrop-blur-xl border border-slate-200/80 shadow-2xl overflow-hidden my-auto select-none">
-        {/* Header Modal (Shrink-0 agar tidak pernah terpotong) */}
+        {/* Header Modal */}
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 shrink-0">
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
               Koneksi Perangkat HP
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Pindai kode QR menggunakan kamera HP untuk membuka antarmuka perangkat.
+              Pindai kode QR menggunakan kamera HP untuk membuka antarmuka perangkat edge.
             </p>
           </div>
           <button
@@ -54,10 +95,86 @@ export default function QrConnectModal({
           </button>
         </div>
 
-        {/* Isi Modal: Scrollable jika layar pendek */}
-        <div className="p-5 sm:p-6 overflow-y-auto">
+        {/* Isi Modal */}
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+          {/* Banner Peringatan HTTPS jika Origin Saat Ini Insecure */}
+          {isInsecureOrigin && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200/80 text-xs text-amber-900 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold">
+                    Perhatian: Akses Sensor HP Memerlukan HTTPS
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-amber-800">
+                    Dashboard sedang dibuka di <code>{currentOrigin}</code>. Browser HP akan menolak izin mikrofon, GPS, dan akselerometer bila dibuka melalui alamat HTTP atau localhost HP sendiri.
+                  </p>
+                </div>
+              </div>
+
+              {/* Opsi Pemilihan URL Dasar QR */}
+              <div className="pt-2 border-t border-amber-200/60 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider mr-1">
+                  Pilihan URL QR:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBaseUrl(PRODUCTION_URL)}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all ${
+                    selectedBaseUrl === PRODUCTION_URL
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "bg-white text-slate-700 border border-amber-200 hover:bg-amber-100/60"
+                  }`}
+                >
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <span>Vercel HTTPS (Rekomendasi)</span>
+                  {selectedBaseUrl === PRODUCTION_URL && <Check className="w-3 h-3 ml-0.5" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedBaseUrl(currentOrigin)}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-all ${
+                    selectedBaseUrl === currentOrigin
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "bg-white text-slate-700 border border-amber-200 hover:bg-amber-100/60"
+                  }`}
+                >
+                  <span>Localhost</span>
+                  {selectedBaseUrl === currentOrigin && <Check className="w-3 h-3 ml-0.5 inline" />}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Form Input URL Tunnel Kustom */}
+          <form
+            onSubmit={handleApplyCustomTunnel}
+            className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+          >
+            <div className="flex items-center gap-1.5 text-slate-500 pl-1">
+              <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-[11px] font-semibold shrink-0">
+                Tunnel Kustom:
+              </span>
+            </div>
+            <input
+              type="text"
+              value={customTunnelUrl}
+              onChange={(e) => setCustomTunnelUrl(e.target.value)}
+              placeholder="misal: https://nama-tunnel.trycloudflare.com"
+              className="flex-1 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+            />
+            <button
+              type="submit"
+              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shrink-0 transition-colors"
+            >
+              Gunakan
+            </button>
+          </form>
+
           {/* Segmented Control Tab Khusus Layar Ponsel (< sm) */}
-          <div className="sm:hidden flex p-1 bg-slate-100 rounded-2xl mb-4 border border-slate-200/70">
+          <div className="sm:hidden flex p-1 bg-slate-100 rounded-2xl border border-slate-200/70">
             <button
               type="button"
               onClick={() => setActiveMobileTab("anak")}
@@ -99,7 +216,7 @@ export default function QrConnectModal({
               <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-sm">
                 <QRCodeSVG value={anakUrl} size={148} />
               </div>
-              <p className="text-[11px] font-mono text-slate-500 mt-3 break-all">
+              <p className="text-[11px] font-mono text-slate-500 mt-3 break-all max-w-[220px]">
                 {anakUrl}
               </p>
               <a
@@ -126,7 +243,7 @@ export default function QrConnectModal({
               <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-sm">
                 <QRCodeSVG value={ortuUrl} size={148} />
               </div>
-              <p className="text-[11px] font-mono text-slate-500 mt-3 break-all">
+              <p className="text-[11px] font-mono text-slate-500 mt-3 break-all max-w-[220px]">
                 {ortuUrl}
               </p>
               <a
@@ -142,7 +259,7 @@ export default function QrConnectModal({
           </div>
         </div>
 
-        {/* Footer Modal (Shrink-0) */}
+        {/* Footer Modal */}
         <div className="px-5 sm:px-6 py-3 border-t border-slate-100 flex justify-end shrink-0 bg-slate-50/50">
           <button
             type="button"

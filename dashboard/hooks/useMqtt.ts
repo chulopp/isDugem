@@ -100,8 +100,8 @@ export function useMqtt(handlers: UseMqttHandlers) {
         (err) => {
           if (err) {
             console.error(`[MQTT] Gagal publish ke ${topic}:`, err);
-          } else {
-            console.log(`[MQTT] Berhasil publish ke ${topic}`);
+          } else if (process.env.NEXT_PUBLIC_MQTT_DEBUG === "1") {
+            console.debug(`[MQTT] Berhasil publish ke ${topic}`);
           }
         }
       );
