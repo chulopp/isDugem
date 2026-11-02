@@ -108,6 +108,7 @@ class AnakTelemetry:
     db: Optional[float]
     accel_magnitude: float
     device_id: str = "anak"
+    speed_mps: Optional[float] = None  
 
     @classmethod
     def from_payload(cls, data: Any) -> "AnakTelemetry":
@@ -132,6 +133,13 @@ class AnakTelemetry:
                 _mapping(motion, "motion"), "accel_magnitude", "motion.accel_magnitude", 0.0
             )
 
+        raw_speed = loc.get("speed_mps")
+        speed_mps = (
+            float(raw_speed)
+            if _is_number(raw_speed) and math.isfinite(raw_speed) and 0 <= raw_speed <= 60
+            else None
+        )
+
         return cls(
             sequence=_sequence(data),
             sent_at_ms=_sent_at_ms(data),
@@ -141,6 +149,7 @@ class AnakTelemetry:
             rms=rms_num,
             db=db_num,
             accel_magnitude=accel,
+            speed_mps=speed_mps,
         )
 
 @dataclass
@@ -214,15 +223,19 @@ class Alert:
     reason: str
     timestamp_ms: int
     context: AlertContext
+    ml_meta: Optional[Dict[str, Any]] = None  
 
     def __post_init__(self) -> None:
         if self.status not in ALL_STATUSES:
             raise ValueError(f"status tidak ada di enum kontrak: {self.status!r}")
 
     def to_payload(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "status": self.status,
             "reason": self.reason,
             "timestamp_ms": int(self.timestamp_ms),
             "context": self.context.to_dict(),
         }
+        if self.ml_meta is not None:
+            payload["ml_meta"] = dict(self.ml_meta)
+        return payload

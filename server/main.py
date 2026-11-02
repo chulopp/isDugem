@@ -15,10 +15,13 @@ from models import Alert, AlertContext, AnakTelemetry, OrtuTelemetry, PayloadErr
 from mqtt_client import MqttClient
 from processing.audio_rms import DB_MAX, DB_MIN, rms_to_db
 from processing.decision_engine import (
+    MLEngine,
     build_context,
     build_reason,
     classify,
+    classify_with_fallback,
     get_time_label,
+    load_ml_engine,
     nearest_poi,
 )
 
@@ -34,10 +37,12 @@ class GuardianServer:
         cfg: Config,
         publish: PublishFn,
         clock: Callable[[], float] = time.time,
+        ml_engine: Optional[MLEngine] = None,
     ) -> None:
         self.cfg = cfg
         self._publish = publish
         self._clock = clock
+        self._ml = ml_engine
         self._tz = ZoneInfo(cfg.timezone)
 
         self.latest_anak: Optional[AnakTelemetry] = None
@@ -219,9 +224,15 @@ class GuardianServer:
         )
         db_level = self._db_level(tel)
         ctx = build_context(tel.lat, tel.lon, db_level, time_label, self.cfg.poi)
-        status = classify(ctx, self.cfg.radii_m)
+        status, ml_result = classify_with_fallback(
+            ctx, local_dt, tel, self.cfg.radii_m, self._ml
+        )
         near_name, near_dist = nearest_poi(ctx)
         reason = build_reason(status, ctx, local_dt.strftime("%H:%M"), self.cfg.radii_m)
+        ml_meta = None
+        if ml_result is not None:
+            reason = ml_result.reason(reason)
+            ml_meta = ml_result.to_meta()
 
         return Alert(
             status=status,
@@ -233,6 +244,7 @@ class GuardianServer:
                 distance_m=near_dist,
                 db=db_level,
             ),
+            ml_meta=ml_meta,
         )
 
     def _local_datetime(self, tel: AnakTelemetry, now_s: float) -> datetime:
@@ -348,7 +360,8 @@ def main() -> None:
     logger.info("RantauGuard server | PROJECT_ID=%s | prefix=%s", cfg.project_id, cfg.topic_prefix)
 
     client = MqttClient(cfg, cfg.subscribe_topics)
-    server = GuardianServer(cfg, publish=client.publish_json)
+    ml_engine = load_ml_engine(cfg)  # None bila dinonaktifkan/gagal -> fallback rule-based
+    server = GuardianServer(cfg, publish=client.publish_json, ml_engine=ml_engine)
     client.on_publish_confirm = server.handle_publish_confirm
     client.on_message = server.handle_message
 

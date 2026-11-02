@@ -73,3 +73,6 @@ desktop.ini
 # Local Python virtual environments
 /server/.venv/
 /server/.venv*/
+
+/server/ml/data
+/server/ml/artifacts
