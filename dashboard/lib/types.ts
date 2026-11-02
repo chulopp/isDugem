@@ -18,6 +18,7 @@ export interface AnakTelemetry {
     lat: number;
     lon: number;
     accuracy_m: number;
+    speed_mps?: number;
   };
   audio: {
     rms: number;
